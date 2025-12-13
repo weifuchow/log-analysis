@@ -14,6 +14,8 @@ import { showStatusMessage } from '../utils/ui.js';
 export function initWorkspace() {
     const exportBtn = document.getElementById('exportBtn');
     const clearWorkspaceBtn = document.getElementById('clearWorkspaceBtn');
+    const generatePromptBtn = document.getElementById('generatePromptBtn');
+    const copyPromptBtn = document.getElementById('copyPromptBtn');
 
     if (exportBtn) {
         exportBtn.addEventListener('click', exportWorkspace);
@@ -23,8 +25,79 @@ export function initWorkspace() {
         clearWorkspaceBtn.addEventListener('click', clearWorkspace);
     }
 
+    if (generatePromptBtn) {
+        generatePromptBtn.addEventListener('click', generateWorkspacePrompt);
+    }
+
+    if (copyPromptBtn) {
+        copyPromptBtn.addEventListener('click', copyWorkspacePrompt);
+    }
+
     // 加载工作区数据
     loadWorkspace();
+}
+
+export function generateWorkspacePrompt() {
+    const descriptionInput = document.getElementById('issueDescription');
+    const promptOutput = document.getElementById('aiPromptOutput');
+
+    if (!descriptionInput || !promptOutput) return;
+
+    const description = descriptionInput.value.trim();
+
+    if (!description) {
+        showStatusMessage('请先描述问题现象', 'error');
+        return;
+    }
+
+    if (state.workspace.length === 0) {
+        showStatusMessage('请先在工作区标记相关日志', 'error');
+        return;
+    }
+
+    const sortedWorkspace = [...state.workspace].sort((a, b) => a.timestamp - b.timestamp);
+    const timeline = sortedWorkspace.map((item, index) => {
+        const firstLine = item.content.split('\n')[0] || item.content;
+        const tagText = item.tags && item.tags.length > 0
+            ? ` 标签: ${item.tags.map(tag => tag.name).join(', ')}`
+            : '';
+        return `${index + 1}. ${item.timestamp.toLocaleString()} | ${item.source || '日志'}${tagText}\n   ${firstLine}`;
+    }).join('\n');
+
+    const prompt = [
+        '请作为工业自动化日志分析助手，结合以下信息完成故障研判：',
+        `- 问题现象: ${description}`,
+        '- 处理要求: 先梳理时间线，再提炼现象特征，分析可能原因并给出排查建议。',
+        '- 日志时间线（按标记顺序）:',
+        timeline,
+        '',
+        '请输出：',
+        '1) 关键时间节点与事件串联（按时间线归纳）',
+        '2) 对问题现象的分析与推测原因',
+        '3) 需要重点关注的设备/订单/车辆或字段',
+        '4) 可进一步验证或收集的日志/指标建议'
+    ].join('\n');
+
+    promptOutput.value = prompt;
+    showStatusMessage('AI 提示词已生成，可直接复制到大模型', 'success');
+}
+
+export async function copyWorkspacePrompt() {
+    const promptOutput = document.getElementById('aiPromptOutput');
+    if (!promptOutput || !promptOutput.value.trim()) {
+        showStatusMessage('请先生成提示词', 'info');
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(promptOutput.value);
+        showStatusMessage('提示词已复制到剪贴板', 'success');
+    } catch (error) {
+        console.warn('Clipboard API 不可用，尝试回退复制。', error);
+        promptOutput.select();
+        document.execCommand('copy');
+        showStatusMessage('提示词已复制', 'success');
+    }
 }
 
 /**

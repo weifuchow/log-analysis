@@ -122,6 +122,19 @@ function showVariableModal(template) {
     console.log('变量模态框已显示');
 }
 
+function applyTemplateDsl(template, keywordList) {
+    const dslInput = document.getElementById('keywordDsl');
+    if (!dslInput) return;
+
+    if (template.dsl && template.dsl.trim()) {
+        dslInput.value = template.dsl;
+        return;
+    }
+
+    const operator = template.logic === 'or' ? ' OR ' : ' AND ';
+    dslInput.value = keywordList.join(operator);
+}
+
 /**
  * 应用模板（带变量替换）
  */
@@ -167,7 +180,7 @@ export function applyTemplate() {
 
     // 应用到搜索框
     document.getElementById('keywords').value = processedKeywords.join('\n');
-    document.querySelector(`input[name="logic"][value="${state.currentTemplate.logic}"]`).checked = true;
+    applyTemplateDsl(state.currentTemplate, processedKeywords);
 
     closeModal('variableModal');
     showStatusMessage(`已应用模板: ${state.currentTemplate.name}`, 'success');
@@ -180,7 +193,7 @@ function applyTemplateDirectly(template) {
     console.log('直接应用模板:', template);
 
     document.getElementById('keywords').value = template.keywords.join('\n');
-    document.querySelector(`input[name="logic"][value="${template.logic}"]`).checked = true;
+    applyTemplateDsl(template, template.keywords);
     showStatusMessage(`已应用模板: ${template.name}`, 'success');
 }
 
@@ -267,7 +280,8 @@ export function showTemplateManager() {
 export function saveTemplate() {
     const name = document.getElementById('templateName').value.trim();
     const keywords = document.getElementById('templateKeywords').value.trim().split('\n').filter(k => k.trim());
-    const logic = document.querySelector('input[name="logic"]:checked').value;
+    const dslInput = document.getElementById('keywordDsl');
+    const dsl = dslInput ? dslInput.value.trim() : '';
 
     if (!name || keywords.length === 0) {
         showStatusMessage('请输入模板名称和关键词', 'error');
@@ -275,7 +289,12 @@ export function saveTemplate() {
     }
 
     const templates = getTemplates();
-    templates.push({ name, keywords, logic });
+    templates.push({
+        name,
+        keywords,
+        logic: 'and',
+        dsl: dsl || keywords.join(' AND ')
+    });
     setLocalStorage('searchTemplates', templates);
 
     document.getElementById('templateName').value = '';
@@ -292,7 +311,7 @@ export function loadTemplate(index) {
     if (!template) return;
 
     document.getElementById('keywords').value = template.keywords.join('\n');
-    document.querySelector(`input[name="logic"][value="${template.logic}"]`).checked = true;
+    applyTemplateDsl(template, template.keywords);
 
     closeModal('templateManagerModal');
     showStatusMessage(`已加载模板: ${template.name}`, 'success');

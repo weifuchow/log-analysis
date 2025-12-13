@@ -13,6 +13,9 @@ export const state = {
     // 搜索结果
     searchResults: [],
 
+    // 当前高亮关键词列表（来源于 DSL 表达式）
+    activeKeywords: [],
+
     // 工作区
     workspace: [],
 
@@ -36,6 +39,7 @@ export function resetState() {
     state.fileList = [];
     state.remoteLogData = null;
     state.searchResults = [];
+    state.activeKeywords = [];
     state.isSearching = false;
     state.overallTimeRange = null;
     state.currentTemplate = null;
@@ -47,5 +51,6 @@ export function resetState() {
  */
 export function resetSearchState() {
     state.searchResults = [];
+    state.activeKeywords = [];
     state.isSearching = false;
 }
