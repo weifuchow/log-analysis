@@ -10,11 +10,158 @@ import { highlightKeywords } from '../utils/format.js';
 import { showStatusMessage, setButtonLoading } from '../utils/ui.js';
 
 /**
+ * 解析关键词 DSL，支持 AND/OR/NOT 和括号
+ */
+function buildDslEvaluator(expression) {
+    const tokens = tokenizeDsl(expression);
+    let index = 0;
+
+    function parseExpression() {
+        let node = parseTerm();
+        while (index < tokens.length && tokens[index].type === 'op' && tokens[index].value === 'OR') {
+            index++;
+            const right = parseTerm();
+            node = { type: 'or', children: [node, right] };
+        }
+        return node;
+    }
+
+    function parseTerm() {
+        let node = parseFactor();
+        while (index < tokens.length && tokens[index].type === 'op' && tokens[index].value === 'AND') {
+            index++;
+            const right = parseFactor();
+            node = { type: 'and', children: [node, right] };
+        }
+        return node;
+    }
+
+    function parseFactor() {
+        let token = tokens[index];
+        let node;
+
+        if (token && token.type === 'op' && token.value === 'NOT') {
+            index++;
+            node = { type: 'not', child: parseFactor() };
+        } else if (token && token.type === 'paren' && token.value === '(') {
+            index++;
+            node = parseExpression();
+            if (!tokens[index] || tokens[index].type !== 'paren' || tokens[index].value !== ')') {
+                throw new Error('括号未闭合，请检查表达式');
+            }
+            index++; // 跳过右括号
+        } else if (token && token.type === 'keyword') {
+            node = { type: 'keyword', value: token.value, valueLower: token.valueLower };
+            index++;
+        } else {
+            throw new Error('表达式存在无法识别的部分，请检查 AND/OR/NOT 的使用');
+        }
+
+        return node;
+    }
+
+    const ast = parseExpression();
+
+    if (index < tokens.length) {
+        throw new Error('表达式解析未完成，请检查多余的符号或缺少运算符');
+    }
+
+    const keywordSet = new Set(tokens.filter(t => t.type === 'keyword').map(t => t.value));
+
+    return {
+        evaluate: (contentLower) => evaluateAst(ast, contentLower),
+        keywords: Array.from(keywordSet)
+    };
+}
+
+/**
+ * 将 DSL 表达式拆分为 token
+ */
+function tokenizeDsl(expression) {
+    const tokens = [];
+    let i = 0;
+
+    while (i < expression.length) {
+        const char = expression[i];
+
+        if (/\s/.test(char)) {
+            i++;
+            continue;
+        }
+
+        if (char === '(' || char === ')') {
+            tokens.push({ type: 'paren', value: char });
+            i++;
+            continue;
+        }
+
+        if (char === '"') {
+            let j = i + 1;
+            let buffer = '';
+            while (j < expression.length && expression[j] !== '"') {
+                buffer += expression[j];
+                j++;
+            }
+            if (j >= expression.length) {
+                throw new Error('找不到匹配的引号，请确认关键词是否正确闭合');
+            }
+            tokens.push({ type: 'keyword', value: buffer, valueLower: buffer.toLowerCase() });
+            i = j + 1;
+            continue;
+        }
+
+        const remaining = expression.slice(i);
+        const opMatch = remaining.match(/^(AND|OR|NOT)\b/i);
+        if (opMatch) {
+            const op = opMatch[1].toUpperCase();
+            tokens.push({ type: 'op', value: op });
+            i += op.length;
+            continue;
+        }
+
+        let j = i;
+        while (j < expression.length && !/\s|[()]/.test(expression[j])) {
+            j++;
+        }
+
+        const keyword = expression.slice(i, j);
+        tokens.push({ type: 'keyword', value: keyword, valueLower: keyword.toLowerCase() });
+        i = j;
+    }
+
+    if (tokens.length === 0) {
+        throw new Error('请输入至少一个关键词或组合表达式');
+    }
+
+    return tokens;
+}
+
+/**
+ * 计算 AST
+ */
+function evaluateAst(node, contentLower) {
+    switch (node.type) {
+        case 'keyword':
+            return contentLower.includes(node.valueLower);
+        case 'not':
+            return !evaluateAst(node.child, contentLower);
+        case 'and':
+            return node.children.every(child => evaluateAst(child, contentLower));
+        case 'or':
+            return node.children.some(child => evaluateAst(child, contentLower));
+        default:
+            return false;
+    }
+}
+
+/**
  * 初始化搜索引擎
  */
 export function initSearchEngine() {
     const searchBtn = document.getElementById('searchBtn');
     const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+    setupKeywordDslSupport();
 
     if (searchBtn) {
         searchBtn.addEventListener('click', performSearch);
@@ -23,6 +170,49 @@ export function initSearchEngine() {
     if (clearSearchBtn) {
         clearSearchBtn.addEventListener('click', clearSearch);
     }
+}
+
+/**
+ * 同步关键词与 DSL 编辑器
+ */
+function setupKeywordDslSupport() {
+    const keywordsInput = document.getElementById('keywords');
+    const dslInput = document.getElementById('keywordDsl');
+    const rebuildBtn = document.getElementById('rebuildDslBtn');
+
+    if (!keywordsInput || !dslInput) return;
+
+    let userEdited = false;
+
+    const rebuildExpression = () => {
+        const keywordList = keywordsInput.value
+            .split('\n')
+            .map(k => k.trim())
+            .filter(Boolean);
+
+        dslInput.value = keywordList.join(' AND ');
+        userEdited = false;
+    };
+
+    keywordsInput.addEventListener('input', () => {
+        if (!userEdited || !dslInput.value.trim()) {
+            rebuildExpression();
+        }
+    });
+
+    dslInput.addEventListener('input', () => {
+        userEdited = true;
+    });
+
+    if (rebuildBtn) {
+        rebuildBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            rebuildExpression();
+            showStatusMessage('已根据关键词重建组合表达式', 'success');
+        });
+    }
+
+    rebuildExpression();
 }
 
 /**
@@ -35,12 +225,22 @@ export async function performSearch() {
     }
 
     const keywords = document.getElementById('keywords').value.trim().split('\n').filter(k => k.trim());
-    const logic = document.querySelector('input[name="logic"]:checked').value;
+    const keywordDsl = document.getElementById('keywordDsl')?.value.trim();
     const beginDate = document.getElementById('searchBeginDate').value;
     const endDate = document.getElementById('searchEndDate').value;
 
     if (keywords.length === 0) {
         showStatusMessage('请输入搜索关键词', 'error');
+        return;
+    }
+
+    const dslExpression = keywordDsl || keywords.join(' AND ');
+    let dsl;
+
+    try {
+        dsl = buildDslEvaluator(dslExpression);
+    } catch (error) {
+        showStatusMessage(`关键词组合有误: ${error.message}`, 'error');
         return;
     }
 
@@ -74,22 +274,24 @@ export async function performSearch() {
         const beginTime = beginDate ? new Date(beginDate) : null;
         const endTime = endDate ? new Date(endDate) : null;
 
+        state.activeKeywords = dsl.keywords;
+
         // 准备所有搜索任务
         const searchTasks = buildSearchTasks(readyFiles);
 
         // 启动多线程搜索
-        const searchParams = { keywords, logic, beginTime, endTime };
+        const searchParams = { evaluate: dsl.evaluate, beginTime, endTime };
         await performMultiThreadSearch(searchTasks, searchParams, SEARCH_CONFIG.MAX_RESULTS, (results, finished) => {
             if (results.length + state.searchResults.length > SEARCH_CONFIG.MAX_RESULTS) {
                 isResultLimitReached = true;
                 const allowedResults = results.slice(0, SEARCH_CONFIG.MAX_RESULTS - state.searchResults.length);
                 state.searchResults.push(...allowedResults);
-                updateRealTimeResults(keywords);
+                updateRealTimeResults();
                 return true; // 停止搜索
             }
 
             state.searchResults.push(...results);
-            updateRealTimeResults(keywords);
+            updateRealTimeResults();
             return false; // 继续搜索
         });
 
@@ -100,7 +302,7 @@ export async function performSearch() {
         }
 
         // 最终显示完整结果
-        displaySearchResults(keywords);
+        displaySearchResults();
 
         if (isResultLimitReached) {
             showStatusMessage(`搜索完成，已达到最大结果数限制 ${SEARCH_CONFIG.MAX_RESULTS} 条，请使用更精确的关键词`, 'warning');
@@ -249,7 +451,7 @@ async function preprocessTask(task) {
  * 在主线程中处理单个任务
  */
 async function processTaskInMainThread(task, searchParams) {
-    const { keywords, logic, beginTime, endTime } = searchParams;
+    const { evaluate, beginTime, endTime } = searchParams;
     const results = [];
 
     let content;
@@ -296,7 +498,7 @@ async function processTaskInMainThread(task, searchParams) {
 
         if (timestampRegex.test(line)) {
             if (currentLog) {
-                const shouldAdd = checkLogMatch(currentLog, keywords, logic, beginTime, endTime);
+                const shouldAdd = checkLogMatch(currentLog, evaluate, beginTime, endTime);
                 if (shouldAdd) {
                     results.push(currentLog);
                     if (results.length >= 20000) break;
@@ -319,7 +521,7 @@ async function processTaskInMainThread(task, searchParams) {
     }
 
     if (currentLog) {
-        const shouldAdd = checkLogMatch(currentLog, keywords, logic, beginTime, endTime);
+        const shouldAdd = checkLogMatch(currentLog, evaluate, beginTime, endTime);
         if (shouldAdd) {
             results.push(currentLog);
         }
@@ -333,22 +535,18 @@ async function processTaskInMainThread(task, searchParams) {
 /**
  * 检查日志是否匹配
  */
-function checkLogMatch(log, keywords, logic, beginTime, endTime) {
+function checkLogMatch(log, evaluateDsl, beginTime, endTime) {
     if (beginTime && log.timestamp < beginTime) return false;
     if (endTime && log.timestamp > endTime) return false;
 
     const content = log.content.toLowerCase();
-    const matches = keywords.map(keyword =>
-        content.includes(keyword.toLowerCase())
-    );
-
-    return logic === 'and' ? matches.every(m => m) : matches.some(m => m);
+    return evaluateDsl ? evaluateDsl(content) : false;
 }
 
 /**
  * 实时更新搜索结果显示
  */
-function updateRealTimeResults(keywords) {
+function updateRealTimeResults() {
     const realTimeContainer = document.getElementById('realTimeResults');
     const countSpan = document.getElementById('resultCount');
 
@@ -371,7 +569,7 @@ function updateRealTimeResults(keywords) {
                 </div>
                 <button class="mark-btn" data-log-id="${log.id}">标记</button>
             </div>
-            <div class="log-content">${highlightKeywords(log.content, keywords)}</div>
+            <div class="log-content">${highlightKeywords(log.content, state.activeKeywords)}</div>
         </div>
     `).join('');
 
@@ -396,7 +594,7 @@ function updateRealTimeResults(keywords) {
 /**
  * 最终显示搜索结果
  */
-export function displaySearchResults(keywords = null) {
+export function displaySearchResults() {
     const container = document.getElementById('searchResults');
     const countSpan = document.getElementById('resultCount');
 
@@ -414,10 +612,9 @@ export function displaySearchResults(keywords = null) {
         return;
     }
 
-    // 如果没有传入keywords，尝试从输入框获取
-    if (!keywords) {
-        keywords = document.getElementById('keywords').value.trim().split('\n').filter(k => k.trim());
-    }
+    const keywords = state.activeKeywords && state.activeKeywords.length > 0
+        ? state.activeKeywords
+        : document.getElementById('keywords').value.trim().split('\n').filter(k => k.trim());
 
     // 按时间排序
     const sortedResults = [...state.searchResults].sort((a, b) => a.timestamp - b.timestamp);
@@ -495,8 +692,11 @@ export function exportSearchResults() {
  */
 export function clearSearch() {
     document.getElementById('keywords').value = '';
+    const keywordDsl = document.getElementById('keywordDsl');
+    if (keywordDsl) keywordDsl.value = '';
     document.querySelectorAll('.template-btn').forEach(btn => btn.classList.remove('active'));
     state.searchResults = [];
+    state.activeKeywords = [];
     displaySearchResults();
     showStatusMessage('搜索条件已清空', 'info');
 }
