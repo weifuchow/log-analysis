@@ -155,6 +155,16 @@ function evaluateAst(node, contentLower) {
 }
 
 /**
+ * 将关键词列表转换为安全的 DSL 表达式
+ */
+function buildDslFromKeywords(keywordList) {
+    return keywordList
+        .map(keyword => keyword.replace(/"/g, "'"))
+        .map(keyword => `"${keyword}"`)
+        .join(' AND ');
+}
+
+/**
  * 初始化搜索引擎
  */
 export function initSearchEngine() {
@@ -190,7 +200,7 @@ function setupKeywordDslSupport() {
             .map(k => k.trim())
             .filter(Boolean);
 
-        dslInput.value = keywordList.join(' AND ');
+        dslInput.value = buildDslFromKeywords(keywordList);
         userEdited = false;
     };
 
@@ -234,7 +244,7 @@ export async function performSearch() {
         return;
     }
 
-    const dslExpression = keywordDsl || keywords.join(' AND ');
+    const dslExpression = keywordDsl || buildDslFromKeywords(keywords);
     let dsl;
 
     try {
