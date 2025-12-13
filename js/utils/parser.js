@@ -214,3 +214,23 @@ export async function decompressGzipFile(buffer, fileName) {
         }
     }
 }
+
+/**
+ * 从tar条目中提取时间范围
+ */
+export async function extractTimeRangeFromTarEntry(entry) {
+    let content;
+
+    if (entry.name.endsWith('.gz')) {
+        content = await decompressGzipFile(entry.buffer, entry.name);
+    } else {
+        const decoder = new TextDecoder('utf-8', { fatal: false, ignoreBOM: true });
+        content = decoder.decode(entry.buffer);
+    }
+
+    if (!content || content.length === 0) {
+        throw new Error(`文件 ${entry.name} 解压后内容为空`);
+    }
+
+    return extractTimeRangeFromContent(content);
+}
