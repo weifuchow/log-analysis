@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "智能日志分析工具",
+  "version": "1.0",
+  "description": "一个功能强大的日志分析和搜索工具",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "downloads",
+    "background",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_title": "智能日志分析工具"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["libs/*", "main.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
