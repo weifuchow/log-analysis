@@ -5,8 +5,8 @@
 
 import { state } from '../core/state.js';
 import { FILE_STATUS } from '../core/constants.js';
-import { SimpleTarReader, extractTimeRangeFromContent, decompressGzipFile, extractFromZipBuffer } from '../utils/parser.js';
-import { formatFileSize, getStatusText } from '../utils/format.js';
+import { SimpleTarReader, extractTimeRangeFromContent, decompressGzipFile, extractFromZipBuffer, extractTimeRangeFromTarEntry } from '../utils/parser.js';
+import { formatFileSize, getStatusText, formatDateForInput } from '../utils/format.js';
 import { showStatusMessage } from '../utils/ui.js';
 
 /**
@@ -177,29 +177,6 @@ async function processTarFile(file, fileInfo) {
 }
 
 /**
- * 从tar条目中提取时间范围
- */
-async function extractTimeRangeFromTarEntry(entry) {
-    let content;
-
-    if (entry.name.endsWith('.gz')) {
-        content = await decompressGzipFile(entry.buffer, entry.name);
-    } else {
-        const decoder = new TextDecoder('utf-8', { fatal: false, ignoreBOM: true });
-        content = decoder.decode(entry.buffer);
-    }
-
-    // 检查解压后的内容
-    if (!content || content.length === 0) {
-        throw new Error(`文件 ${entry.name} 解压后内容为空`);
-    }
-
-    console.log(`文件 ${entry.name} 解压成功，内容长度:`, content.length);
-
-    return extractTimeRangeFromContent(content);
-}
-
-/**
  * 从文件中提取时间范围
  */
 async function extractTimeRangeFromFile(file) {
@@ -318,7 +295,6 @@ export function updateOverallTimeRange() {
         const searchEndDate = document.getElementById('searchEndDate');
 
         if (searchBeginDate && searchEndDate) {
-            const { formatDateForInput } = await import('../utils/format.js');
             searchBeginDate.value = formatDateForInput(minStart);
             searchEndDate.value = formatDateForInput(maxEnd);
         }
