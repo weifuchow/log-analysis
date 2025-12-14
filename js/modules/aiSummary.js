@@ -94,11 +94,11 @@ function buildWorkspaceTimeline() {
 
     const sorted = [...state.workspace].sort((a, b) => a.timestamp - b.timestamp);
     return sorted.map((item, index) => {
-        const titleLine = item.content.split('\n')[0] || item.content;
+        const fullContent = (item.content || '').replace(/\n/g, '\n   ');
         const tagText = item.tags && item.tags.length > 0
             ? ` | 标签: ${item.tags.map(tag => tag.name).join(', ')}`
             : '';
-        return `${index + 1}. ${item.timestamp.toLocaleString()} | ${item.source || '日志'}${tagText}\n   ${titleLine}`;
+        return `${index + 1}. ${item.timestamp.toLocaleString()} | ${item.source || '日志'}${tagText}\n   ${fullContent}`;
     }).join('\n');
 }
 

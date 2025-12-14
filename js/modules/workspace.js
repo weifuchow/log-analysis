@@ -57,11 +57,11 @@ export function generateWorkspacePrompt() {
 
     const sortedWorkspace = [...state.workspace].sort((a, b) => a.timestamp - b.timestamp);
     const timeline = sortedWorkspace.map((item, index) => {
-        const firstLine = item.content.split('\n')[0] || item.content;
+        const fullContent = (item.content || '').replace(/\n/g, '\n   ');
         const tagText = item.tags && item.tags.length > 0
             ? ` 标签: ${item.tags.map(tag => tag.name).join(', ')}`
             : '';
-        return `${index + 1}. ${item.timestamp.toLocaleString()} | ${item.source || '日志'}${tagText}\n   ${firstLine}`;
+        return `${index + 1}. ${item.timestamp.toLocaleString()} | ${item.source || '日志'}${tagText}\n   ${fullContent}`;
     }).join('\n');
 
     const prompt = [
