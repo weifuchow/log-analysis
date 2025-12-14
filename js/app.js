@@ -12,6 +12,7 @@ import { initWorkspace } from './modules/workspace.js';
 import { initTemplates } from './modules/templates.js';
 import { initRemoteLog } from './modules/remoteLog.js';
 import { initSettings } from './modules/settings.js';
+import { initAiSummary } from './modules/aiSummary.js';
 
 /**
  * 应用初始化
@@ -104,6 +105,7 @@ document.addEventListener('DOMContentLoaded', function() {
         initTemplates();
         initRemoteLog();
         initSettings();
+        initAiSummary();
 
         // 设置全局事件监听器
         setupGlobalEventListeners();
