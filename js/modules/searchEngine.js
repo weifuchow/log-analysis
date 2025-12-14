@@ -499,12 +499,11 @@ async function processTaskInMainThread(task, searchParams) {
     }
 
     // 解析日志内容
-    const lines = content.split('\n');
     const timestampRegex = /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}/;
     let currentLog = null;
+    let lineIndex = 0;
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+    for (const line of iterateLines(content)) {
 
         if (timestampRegex.test(line)) {
             if (currentLog) {
@@ -524,10 +523,11 @@ async function processTaskInMainThread(task, searchParams) {
         } else if (currentLog) {
             currentLog.content += '\n' + line;
         }
-
-        if (i % SEARCH_CONFIG.YIELD_INTERVAL === 0) {
+        if (lineIndex % SEARCH_CONFIG.YIELD_INTERVAL === 0) {
             await new Promise(resolve => setTimeout(resolve, SEARCH_CONFIG.YIELD_DELAY));
         }
+
+        lineIndex++;
     }
 
     if (currentLog) {
@@ -537,9 +537,25 @@ async function processTaskInMainThread(task, searchParams) {
         }
     }
 
+    content = null;
+
     console.log(`任务 ${task.source} 处理完成，找到 ${results.length} 条匹配日志`);
 
     return results;
+}
+
+function* iterateLines(content) {
+    let start = 0;
+    while (start <= content.length) {
+        const end = content.indexOf('\n', start);
+        if (end === -1) {
+            yield content.slice(start);
+            break;
+        }
+
+        yield content.slice(start, end);
+        start = end + 1;
+    }
 }
 
 /**
