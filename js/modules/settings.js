@@ -41,6 +41,10 @@ export async function saveSettings() {
     const aiModelList = document.getElementById('aiModelList')?.value || '';
     const defaultModel = document.getElementById('aiModel')?.value.trim();
 
+    const currentApiToken = await getStorageValue('apiToken') || '';
+    const currentAiConfig = await getStorageValue('aiConfig') || {};
+    const existingPoeToken = getLocalStorage('poeToken', currentAiConfig.token || '');
+
     const poeModels = aiModelList
         .split(/\n|,/)
         .map(m => m.trim())
@@ -50,15 +54,15 @@ export async function saveSettings() {
         poeModels.unshift(defaultModel);
     }
 
-    await setStorageValue('apiToken', token || '');
+    await setStorageValue('apiToken', token || currentApiToken || '');
     await setStorageValue('aiConfig', {
         provider: 'poe',
-        token: aiToken || '',
+        token: aiToken || existingPoeToken || '',
         model: defaultModel || poeModels[0] || ''
     });
 
     // Poe 配置存入 localStorage，便于前端直接读取
-    setLocalStorage('poeToken', aiToken || '');
+    setLocalStorage('poeToken', aiToken || existingPoeToken || '');
     setLocalStorage('poeModels', poeModels);
     setLocalStorage('poeDefaultModel', defaultModel || poeModels[0] || '');
 

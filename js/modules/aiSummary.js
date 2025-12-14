@@ -6,7 +6,7 @@
 import { state } from '../core/state.js';
 import { getStorageValue } from '../utils/storage.js';
 import { getLocalStorage, setLocalStorage } from '../utils/storage.js';
-import { showStatusMessage, setButtonLoading } from '../utils/ui.js';
+import { showStatusMessage, setButtonLoading, openModal } from '../utils/ui.js';
 
 const MODE_HINTS = {
     report: '报告梳理模式：已知问题现象与怀疑的原因，生成完整报告。',
@@ -24,12 +24,7 @@ const POE_API_URL = 'https://api.poe.com/v1/chat/completions';
 export function initAiSummary() {
     const entryBtn = document.getElementById('aiSummaryEntryBtn');
     if (entryBtn) {
-        entryBtn.addEventListener('click', () => {
-            const section = document.getElementById('aiSummarySection');
-            if (section) {
-                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        });
+        entryBtn.addEventListener('click', () => openModal('aiSummaryModal'));
     }
 
     const modeRadios = document.querySelectorAll('input[name="aiSummaryMode"]');
