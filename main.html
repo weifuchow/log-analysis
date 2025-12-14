@@ -683,6 +683,10 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
 
+        .modal-content.wide {
+            max-width: 900px;
+        }
+
         .modal-header {
             display: flex;
             justify-content: space-between;
@@ -1101,49 +1105,6 @@
                     <textarea id="aiPromptOutput" class="prompt-output" readonly placeholder="生成的提示词会出现在这里，包含时间线梳理和问题分析要点"></textarea>
                 </div>
                 <div class="helper-text">提示词会自动梳理标记日志的时间线，并结合问题现象帮助你向 AI 说明分析思路。</div>
-
-                <div class="ai-summary-section" id="aiSummarySection">
-                    <div class="section-title small">AI 总结</div>
-                    <div class="ai-mode-toggle">
-                        <label><input type="radio" name="aiSummaryMode" value="report" checked> 报告梳理模式</label>
-                        <label><input type="radio" name="aiSummaryMode" value="analysis"> 分析模式</label>
-                    </div>
-                    <div class="ai-summary-meta" id="aiSummaryHint">报告梳理模式：已知问题现象与怀疑的原因，生成完整报告。</div>
-                    <div class="form-group">
-                        <label>Poe 模型</label>
-                        <select id="aiSummaryModelSelector"></select>
-                        <div class="helper-text">从设置中保存的模型列表中选择，发送时会带上对应模型。</div>
-                    </div>
-                    <div class="form-group">
-                        <label>问题现象描述</label>
-                        <textarea id="aiSummaryIssue" placeholder="描述观察到的现象、影响范围或复现场景"></textarea>
-                    </div>
-                    <div class="form-group" id="aiKnownCauseGroup">
-                        <label>问题原因判断</label>
-                        <textarea id="aiKnownCause" placeholder="输入已经掌握的疑似原因、证据或验证结论"></textarea>
-                    </div>
-                    <div class="ai-summary-actions">
-                        <button class="btn" id="previewAiSummaryBtn" style="width: auto;">预览提示词</button>
-                        <button class="btn btn-secondary" id="runAiSummaryBtn" style="width: auto;">AI 分析</button>
-                    </div>
-                    <div class="status-inline" id="aiSummaryStatus"></div>
-                    <div class="form-group">
-                        <label>提示词预览</label>
-                        <textarea id="aiSummaryPromptPreview" class="prompt-output" readonly placeholder="根据模式自动生成的提示词预览"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>AI 输出</label>
-                        <textarea id="aiSummaryResult" class="prompt-output" readonly placeholder="AI 分析结果会展示在这里"></textarea>
-                    </div>
-                    <div class="ai-summary-actions" style="margin-top: -0.5rem;">
-                        <button class="btn btn-secondary" id="exportAiSummaryBtn" style="width: auto;">导出 Markdown</button>
-                        <button class="btn btn-danger" id="clearAiHistoryBtn" style="width: auto;">清空分析历史</button>
-                    </div>
-                    <div class="form-group">
-                        <label>分析历史</label>
-                        <div id="aiSummaryHistory" class="history-list"></div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -1221,6 +1182,57 @@
                 <div class="btn-group">
                     <button class="btn" id="saveTemplateBtn">保存模板</button>
                     <button class="btn btn-secondary" data-modal="templateManagerModal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 总结模态框 -->
+    <div class="modal" id="aiSummaryModal">
+        <div class="modal-content wide">
+            <div class="modal-header">
+                <div class="modal-title">AI 总结</div>
+                <button class="close-btn" data-modal="aiSummaryModal">×</button>
+            </div>
+            <div class="ai-summary-section" id="aiSummarySection">
+                <div class="ai-mode-toggle" style="margin-bottom: 1rem;">
+                    <label><input type="radio" name="aiSummaryMode" value="report" checked> 报告梳理模式</label>
+                    <label><input type="radio" name="aiSummaryMode" value="analysis"> 分析模式</label>
+                </div>
+                <div class="ai-summary-meta" id="aiSummaryHint">报告梳理模式：已知问题现象与怀疑的原因，生成完整报告。</div>
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Poe 模型</label>
+                    <select id="aiSummaryModelSelector"></select>
+                    <div class="helper-text">从设置中保存的模型列表中选择，发送时会带上对应模型。</div>
+                </div>
+                <div class="form-group">
+                    <label>问题现象描述</label>
+                    <textarea id="aiSummaryIssue" placeholder="描述观察到的现象、影响范围或复现场景"></textarea>
+                </div>
+                <div class="form-group" id="aiKnownCauseGroup">
+                    <label>问题原因判断</label>
+                    <textarea id="aiKnownCause" placeholder="输入已经掌握的疑似原因、证据或验证结论"></textarea>
+                </div>
+                <div class="ai-summary-actions">
+                    <button class="btn" id="previewAiSummaryBtn" style="width: auto;">预览提示词</button>
+                    <button class="btn btn-secondary" id="runAiSummaryBtn" style="width: auto;">AI 分析</button>
+                </div>
+                <div class="status-inline" id="aiSummaryStatus"></div>
+                <div class="form-group">
+                    <label>提示词预览</label>
+                    <textarea id="aiSummaryPromptPreview" class="prompt-output" readonly placeholder="根据模式自动生成的提示词预览"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>AI 输出</label>
+                    <textarea id="aiSummaryResult" class="prompt-output" readonly placeholder="AI 分析结果会展示在这里"></textarea>
+                </div>
+                <div class="ai-summary-actions" style="margin-top: -0.5rem;">
+                    <button class="btn btn-secondary" id="exportAiSummaryBtn" style="width: auto;">导出 Markdown</button>
+                    <button class="btn btn-danger" id="clearAiHistoryBtn" style="width: auto;">清空分析历史</button>
+                </div>
+                <div class="form-group">
+                    <label>分析历史</label>
+                    <div id="aiSummaryHistory" class="history-list"></div>
                 </div>
             </div>
         </div>
