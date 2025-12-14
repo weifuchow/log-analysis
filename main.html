@@ -516,6 +516,81 @@
             padding: 1rem;
         }
 
+        .ai-summary-section {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px dashed #e0e0e0;
+        }
+
+        .ai-mode-toggle {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .ai-mode-toggle label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: #2c3e50;
+            font-weight: 500;
+        }
+
+        .ai-summary-meta {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            margin-bottom: 0.5rem;
+            line-height: 1.4;
+        }
+
+        .ai-summary-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .history-list {
+            background: #f8f9fa;
+            border: 1px solid #ecf0f1;
+            border-radius: 6px;
+            padding: 0.5rem;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            padding: 0.5rem;
+            border-bottom: 1px dashed #e0e0e0;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-meta {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            display: flex;
+            justify-content: space-between;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.25rem;
+        }
+
+        .history-preview {
+            font-size: 0.9rem;
+            color: #2c3e50;
+            line-height: 1.4;
+        }
+
+        .status-inline {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+        }
+
         .section-title.small {
             border-bottom: none;
             margin-bottom: 0.5rem;
@@ -1000,6 +1075,7 @@
             <div class="panel-header">
                 工作区
                 <div>
+                    <button class="btn" id="aiSummaryEntryBtn" style="padding: 0.25rem 0.5rem; width: auto; margin-right: 0.5rem;">AI总结</button>
                     <button class="btn btn-secondary" id="exportBtn" style="padding: 0.25rem 0.5rem; width: auto; margin-right: 0.5rem;">导出</button>
                     <button class="btn btn-danger" id="clearWorkspaceBtn" style="padding: 0.25rem 0.5rem; width: auto;">清空</button>
                 </div>
@@ -1025,6 +1101,49 @@
                     <textarea id="aiPromptOutput" class="prompt-output" readonly placeholder="生成的提示词会出现在这里，包含时间线梳理和问题分析要点"></textarea>
                 </div>
                 <div class="helper-text">提示词会自动梳理标记日志的时间线，并结合问题现象帮助你向 AI 说明分析思路。</div>
+
+                <div class="ai-summary-section" id="aiSummarySection">
+                    <div class="section-title small">AI 总结</div>
+                    <div class="ai-mode-toggle">
+                        <label><input type="radio" name="aiSummaryMode" value="report" checked> 报告梳理模式</label>
+                        <label><input type="radio" name="aiSummaryMode" value="analysis"> 分析模式</label>
+                    </div>
+                    <div class="ai-summary-meta" id="aiSummaryHint">报告梳理模式：已知问题现象与怀疑的原因，生成完整报告。</div>
+                    <div class="form-group">
+                        <label>Poe 模型</label>
+                        <select id="aiSummaryModelSelector"></select>
+                        <div class="helper-text">从设置中保存的模型列表中选择，发送时会带上对应模型。</div>
+                    </div>
+                    <div class="form-group">
+                        <label>问题现象描述</label>
+                        <textarea id="aiSummaryIssue" placeholder="描述观察到的现象、影响范围或复现场景"></textarea>
+                    </div>
+                    <div class="form-group" id="aiKnownCauseGroup">
+                        <label>问题原因判断</label>
+                        <textarea id="aiKnownCause" placeholder="输入已经掌握的疑似原因、证据或验证结论"></textarea>
+                    </div>
+                    <div class="ai-summary-actions">
+                        <button class="btn" id="previewAiSummaryBtn" style="width: auto;">预览提示词</button>
+                        <button class="btn btn-secondary" id="runAiSummaryBtn" style="width: auto;">AI 分析</button>
+                    </div>
+                    <div class="status-inline" id="aiSummaryStatus"></div>
+                    <div class="form-group">
+                        <label>提示词预览</label>
+                        <textarea id="aiSummaryPromptPreview" class="prompt-output" readonly placeholder="根据模式自动生成的提示词预览"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>AI 输出</label>
+                        <textarea id="aiSummaryResult" class="prompt-output" readonly placeholder="AI 分析结果会展示在这里"></textarea>
+                    </div>
+                    <div class="ai-summary-actions" style="margin-top: -0.5rem;">
+                        <button class="btn btn-secondary" id="exportAiSummaryBtn" style="width: auto;">导出 Markdown</button>
+                        <button class="btn btn-danger" id="clearAiHistoryBtn" style="width: auto;">清空分析历史</button>
+                    </div>
+                    <div class="form-group">
+                        <label>分析历史</label>
+                        <div id="aiSummaryHistory" class="history-list"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1059,6 +1178,21 @@
                 <div style="font-size: 0.8rem; color: #7f8c8d; margin-top: 0.25rem;">
                     用于远程接口认证的Bearer Token
                 </div>
+            </div>
+            <div class="form-group">
+                <label>Poe 密钥</label>
+                <input type="password" id="aiToken" placeholder="Poe Token">
+                <div style="font-size: 0.8rem; color: #7f8c8d; margin-top: 0.25rem;">仅需填写 Poe 的 API Key，调用时将以 Poe 代理形式转发到所选模型。</div>
+            </div>
+            <div class="form-group">
+                <label>默认 Poe 模型</label>
+                <input type="text" id="aiModel" placeholder="例：claude-3-5-sonnet">
+                <div style="font-size: 0.8rem; color: #7f8c8d; margin-top: 0.25rem;">设置一个默认模型，AI 总结区域会自动选中。</div>
+            </div>
+            <div class="form-group">
+                <label>可用模型列表</label>
+                <textarea id="aiModelList" placeholder="每行一个模型，或使用逗号分隔"></textarea>
+                <div style="font-size: 0.8rem; color: #7f8c8d; margin-top: 0.25rem;">保存后会写入 localStorage，便于在分析时切换不同 Poe 模型。</div>
             </div>
             <div class="btn-group">
                 <button class="btn" id="saveSettingsBtn">保存</button>
