@@ -254,6 +254,12 @@ export function updateFileListDisplay() {
  */
 export function removeFile(index) {
     const fileInfo = state.fileList[index];
+    if (fileInfo) {
+        // 释放可能占用大量内存的引用
+        fileInfo.file = null;
+        fileInfo.subFiles = [];
+    }
+
     state.fileList.splice(index, 1);
     updateFileListDisplay();
     updateOverallTimeRange();

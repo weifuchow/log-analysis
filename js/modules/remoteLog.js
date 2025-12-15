@@ -94,6 +94,11 @@ export async function fetchRemoteLogs() {
 
         // 处理返回的tar数据
         const arrayBuffer = await downloadResponse.arrayBuffer();
+        // 在加载新数据前释放旧的远程日志引用，避免占用内存
+        if (state.remoteLogData && state.remoteLogData.subFiles) {
+            state.remoteLogData.subFiles = [];
+        }
+
         state.remoteLogData = await processRemoteTarData(arrayBuffer, filePath);
 
         updateProgressBar('progressBar', 'progressText', 100, '远程日志获取完成！');
