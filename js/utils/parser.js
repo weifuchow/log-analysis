@@ -64,7 +64,8 @@ export class SimpleTarReader {
                 if (name && size >= 0 && (type === '0' || type === '' || type === '\0')) {
                     // 读取文件内容
                     if (this.offset + size <= this.buffer.length) {
-                        const fileData = this.buffer.slice(this.offset, this.offset + size);
+                        // 使用 subarray 而不是 slice，避免为每个条目额外复制内存
+                        const fileData = this.buffer.subarray(this.offset, this.offset + size);
                         files.push({
                             name: name,
                             size: size,
