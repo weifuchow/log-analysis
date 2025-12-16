@@ -9,6 +9,12 @@ import { decompressGzipFile, extractFromZipBuffer, extractTimestamp } from '../u
 import { highlightKeywords } from '../utils/format.js';
 import { showStatusMessage, setButtonLoading } from '../utils/ui.js';
 
+// 实时结果渲染的缓冲区和控制变量
+let realtimeBuffer = [];
+let realtimeWindow = [];
+let realtimeRenderTimer = null;
+let renderedRealtimeIds = new Set();
+
 /**
  * 解析关键词 DSL，支持 AND/OR/NOT 和括号
  */
@@ -164,6 +170,29 @@ function buildDslFromKeywords(keywordList) {
         .join(' AND ');
 }
 
+function resetRealtimeRendering() {
+    realtimeBuffer = [];
+    realtimeWindow = [];
+    renderedRealtimeIds = new Set();
+    if (realtimeRenderTimer) {
+        clearTimeout(realtimeRenderTimer);
+        realtimeRenderTimer = null;
+    }
+}
+
+function scheduleRealTimeUpdate(newResults = []) {
+    if (newResults.length > 0) {
+        realtimeBuffer.push(...newResults);
+    }
+
+    if (realtimeRenderTimer) return;
+
+    realtimeRenderTimer = setTimeout(() => {
+        realtimeRenderTimer = null;
+        updateRealTimeResults();
+    }, SEARCH_CONFIG.REALTIME_RENDER_INTERVAL);
+}
+
 /**
  * 初始化搜索引擎
  */
@@ -265,6 +294,7 @@ export async function performSearch() {
 
     try {
         state.isSearching = true;
+        resetRealtimeRendering();
         setButtonLoading('searchBtn', true, '搜索中...');
 
         showStatusMessage('开始搜索，正在处理文件...', 'info');
@@ -301,9 +331,12 @@ export async function performSearch() {
             }
 
             state.searchResults.push(...results);
-            updateRealTimeResults();
+            scheduleRealTimeUpdate(results);
             return false; // 继续搜索
         });
+
+        // 处理遗留的实时结果缓冲
+        updateRealTimeResults();
 
         // 移除搜索进度显示
         const progressDiv = document.getElementById('searchProgress');
@@ -576,45 +609,84 @@ function updateRealTimeResults() {
     const realTimeContainer = document.getElementById('realTimeResults');
     const countSpan = document.getElementById('resultCount');
 
-    if (!realTimeContainer) return;
+    if (!realTimeContainer || !countSpan) return;
 
     countSpan.textContent = `${state.searchResults.length} 条结果`;
 
-    // 按时间排序最新的结果
-    const sortedResults = [...state.searchResults].sort((a, b) => a.timestamp - b.timestamp);
+    if (realtimeBuffer.length > 0) {
+        realtimeWindow.push(...realtimeBuffer);
+        realtimeBuffer = [];
+    }
 
-    // 只显示最新的100条结果，避免DOM过大
-    const displayResults = sortedResults.slice(-SEARCH_CONFIG.REALTIME_DISPLAY_LIMIT);
+    if (realtimeWindow.length === 0) {
+        renderedRealtimeIds.clear();
+        realTimeContainer.innerHTML = '';
+        return;
+    }
 
-    realTimeContainer.innerHTML = displayResults.map((log) => `
-        <div class="log-item">
-            <div class="log-header">
-                <div>
-                    <div class="log-timestamp">${log.timestamp.toLocaleString()}</div>
-                    <div class="log-source">${log.source}</div>
-                </div>
-                <button class="mark-btn" data-log-id="${log.id}">标记</button>
-            </div>
-            <div class="log-content">${highlightKeywords(log.content, state.activeKeywords)}</div>
-        </div>
-    `).join('');
+    realtimeWindow.sort((a, b) => a.timestamp - b.timestamp);
 
-    // 为新添加的标记按钮添加事件监听器
-    realTimeContainer.querySelectorAll('.mark-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const logId = this.dataset.logId;
-            const log = state.searchResults.find(l => l.id === logId);
-            if (log) {
-                // 动态导入workspace模块以避免循环依赖
-                import('./workspace.js').then(({ markLogById }) => {
-                    markLogById(log);
-                });
-            }
-        });
+    if (realtimeWindow.length > SEARCH_CONFIG.REALTIME_DISPLAY_LIMIT) {
+        realtimeWindow = realtimeWindow.slice(-SEARCH_CONFIG.REALTIME_DISPLAY_LIMIT);
+    }
+
+    // 移除窗口之外的节点，保证DOM大小稳定
+    const latestIds = new Set(realtimeWindow.map(log => log.id));
+    Array.from(realTimeContainer.children).forEach(child => {
+        if (!latestIds.has(child.dataset.logId)) {
+            renderedRealtimeIds.delete(child.dataset.logId);
+            child.remove();
+        }
     });
+
+    const fragment = document.createDocumentFragment();
+
+    realtimeWindow.forEach(log => {
+        if (!renderedRealtimeIds.has(log.id)) {
+            const element = createRealTimeLogElement(log);
+            fragment.appendChild(element);
+            renderedRealtimeIds.add(log.id);
+        }
+    });
+
+    if (fragment.children.length > 0) {
+        realTimeContainer.appendChild(fragment);
+    }
 
     // 滚动到底部显示最新结果
     realTimeContainer.scrollTop = realTimeContainer.scrollHeight;
+}
+
+function createRealTimeLogElement(log) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'log-item';
+    wrapper.dataset.logId = log.id;
+    wrapper.innerHTML = `
+        <div class="log-header">
+            <div>
+                <div class="log-timestamp">${log.timestamp.toLocaleString()}</div>
+                <div class="log-source">${log.source}</div>
+            </div>
+            <button class="mark-btn" data-log-id="${log.id}">标记</button>
+        </div>
+        <div class="log-content">${highlightKeywords(log.content, state.activeKeywords)}</div>
+    `;
+
+    const markBtn = wrapper.querySelector('.mark-btn');
+    if (markBtn) {
+        markBtn.addEventListener('click', function() {
+            const logId = this.dataset.logId;
+            const targetLog = state.searchResults.find(l => l.id === logId);
+            if (targetLog) {
+                // 动态导入workspace模块以避免循环依赖
+                import('./workspace.js').then(({ markLogById }) => {
+                    markLogById(targetLog);
+                });
+            }
+        });
+    }
+
+    return wrapper;
 }
 
 /**
@@ -721,6 +793,7 @@ export function clearSearch() {
     const keywordDsl = document.getElementById('keywordDsl');
     if (keywordDsl) keywordDsl.value = '';
     document.querySelectorAll('.template-btn').forEach(btn => btn.classList.remove('active'));
+    resetRealtimeRendering();
     state.searchResults = [];
     state.activeKeywords = [];
     displaySearchResults();
