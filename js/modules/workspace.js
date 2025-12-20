@@ -134,6 +134,37 @@ export function markLogById(log) {
 }
 
 /**
+ * 一键标记全部搜索结果
+ */
+export function markAllSearchResults() {
+    if (state.searchResults.length === 0) {
+        showStatusMessage('暂无搜索结果可标记', 'info');
+        return;
+    }
+
+    const existingIds = new Set(state.workspace.map(item => item.id));
+    const newLogs = state.searchResults.filter(log => !existingIds.has(log.id));
+
+    if (newLogs.length === 0) {
+        showStatusMessage('搜索结果已全部标记', 'info');
+        return;
+    }
+
+    const now = new Date();
+    newLogs.forEach(log => {
+        state.workspace.push({
+            ...log,
+            markedAt: now,
+            tags: []
+        });
+    });
+
+    saveWorkspace();
+    displayWorkspace();
+    showStatusMessage(`已标记 ${newLogs.length} 条日志到工作区`, 'success');
+}
+
+/**
  * 显示工作区
  */
 export function displayWorkspace() {

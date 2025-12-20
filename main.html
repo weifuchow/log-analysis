@@ -411,6 +411,12 @@
             margin-bottom: 0.5rem;
         }
 
+        .log-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
         .log-timestamp {
             color: #7f8c8d;
             font-weight: 600;
@@ -446,6 +452,46 @@
 
         .mark-btn:hover {
             background: #e67e22;
+        }
+
+        .around-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 0.25rem 0.5rem;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        .around-btn:hover {
+            background: #2980b9;
+        }
+
+        .around-list {
+            max-height: 60vh;
+            overflow-y: auto;
+            border: 1px solid #ecf0f1;
+            border-radius: 6px;
+            background: #ffffff;
+            margin-top: 0.75rem;
+        }
+
+        .around-item {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #ecf0f1;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .around-item:last-child {
+            border-bottom: none;
+        }
+
+        .around-item.active {
+            background: #fff3cd;
+            border-left: 4px solid #f39c12;
         }
 
         /* 右侧面板 - 工作区 */
@@ -1054,6 +1100,7 @@
                     <div class="btn-group">
                         <button class="btn" id="searchBtn">搜索</button>
                         <button class="btn btn-secondary" id="clearSearchBtn">清空</button>
+                        <button class="btn btn-secondary" id="markAllBtn">全部标记</button>
                     </div>
                     <div id="searchStatus"></div>
                 </div>
@@ -1233,6 +1280,22 @@
                 <div class="form-group">
                     <label>分析历史</label>
                     <div id="aiSummaryHistory" class="history-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="aroundModal">
+        <div class="modal-content wide">
+            <div class="modal-header">
+                <div class="modal-title" id="aroundModalTitle">日志上下文</div>
+                <button class="close-btn" data-modal="aroundModal">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="aroundModalSummary" class="helper-text"></div>
+                <div id="aroundModalList" class="around-list"></div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-modal="aroundModal">关闭</button>
                 </div>
             </div>
         </div>
