@@ -7,7 +7,9 @@ import { state } from '../core/state.js';
 import { SEARCH_CONFIG, FILE_STATUS } from '../core/constants.js';
 import { decompressGzipFile, extractFromZipBuffer, extractTimestamp } from '../utils/parser.js';
 import { highlightKeywords } from '../utils/format.js';
-import { showStatusMessage, setButtonLoading } from '../utils/ui.js';
+import { showStatusMessage, setButtonLoading, openModal } from '../utils/ui.js';
+
+const logCache = new Map();
 
 /**
  * 解析关键词 DSL，支持 AND/OR/NOT 和括号
@@ -170,6 +172,7 @@ function buildDslFromKeywords(keywordList) {
 export function initSearchEngine() {
     const searchBtn = document.getElementById('searchBtn');
     const clearSearchBtn = document.getElementById('clearSearchBtn');
+    const markAllBtn = document.getElementById('markAllBtn');
 
     setupKeywordDslSupport();
 
@@ -179,6 +182,14 @@ export function initSearchEngine() {
 
     if (clearSearchBtn) {
         clearSearchBtn.addEventListener('click', clearSearch);
+    }
+
+    if (markAllBtn) {
+        markAllBtn.addEventListener('click', () => {
+            import('./workspace.js').then(({ markAllSearchResults }) => {
+                markAllSearchResults();
+            });
+        });
     }
 }
 
@@ -270,6 +281,7 @@ export async function performSearch() {
         showStatusMessage('开始搜索，正在处理文件...', 'info');
 
         state.searchResults = [];
+        logCache.clear();
         let isResultLimitReached = false;
 
         countSpan.textContent = '搜索中...';
@@ -502,6 +514,7 @@ async function processTaskInMainThread(task, searchParams) {
     const timestampRegex = /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}/;
     let currentLog = null;
     let lineIndex = 0;
+    let logIndex = 0;
 
     for (const line of iterateLines(content)) {
 
@@ -518,8 +531,10 @@ async function processTaskInMainThread(task, searchParams) {
                 timestamp: extractTimestamp(line),
                 content: line,
                 source: task.source,
-                id: `${task.source}-${Date.now()}-${Math.random()}`
+                id: `${task.source}-${Date.now()}-${Math.random()}`,
+                sequence: logIndex
             };
+            logIndex++;
         } else if (currentLog) {
             currentLog.content += '\n' + line;
         }
@@ -593,11 +608,24 @@ function updateRealTimeResults() {
                     <div class="log-timestamp">${log.timestamp.toLocaleString()}</div>
                     <div class="log-source">${log.source}</div>
                 </div>
-                <button class="mark-btn" data-log-id="${log.id}">标记</button>
+                <div class="log-actions">
+                    <button class="around-btn" data-log-id="${log.id}">Around</button>
+                    <button class="mark-btn" data-log-id="${log.id}">标记</button>
+                </div>
             </div>
             <div class="log-content">${highlightKeywords(log.content, state.activeKeywords)}</div>
         </div>
     `).join('');
+
+    realTimeContainer.querySelectorAll('.around-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const logId = this.dataset.logId;
+            const log = state.searchResults.find(l => l.id === logId);
+            if (log) {
+                showAroundModal(log);
+            }
+        });
+    });
 
     // 为新添加的标记按钮添加事件监听器
     realTimeContainer.querySelectorAll('.mark-btn').forEach(btn => {
@@ -660,13 +688,26 @@ export function displaySearchResults() {
                             <div class="log-timestamp">${log.timestamp.toLocaleString()}</div>
                             <div class="log-source">${log.source}</div>
                         </div>
-                        <button class="mark-btn" data-log-id="${log.id}">标记</button>
+                        <div class="log-actions">
+                            <button class="around-btn" data-log-id="${log.id}">Around</button>
+                            <button class="mark-btn" data-log-id="${log.id}">标记</button>
+                        </div>
                     </div>
                     <div class="log-content">${highlightKeywords(log.content, keywords)}</div>
                 </div>
             `).join('')}
         </div>
     `;
+
+    container.querySelectorAll('.around-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const logId = this.dataset.logId;
+            const log = state.searchResults.find(l => l.id === logId);
+            if (log) {
+                showAroundModal(log);
+            }
+        });
+    });
 
     // 为标记按钮添加事件监听器
     container.querySelectorAll('.mark-btn').forEach(btn => {
@@ -686,6 +727,158 @@ export function displaySearchResults() {
     if (exportBtn) {
         exportBtn.addEventListener('click', exportSearchResults);
     }
+}
+
+async function showAroundModal(log) {
+    const modalTitle = document.getElementById('aroundModalTitle');
+    const modalSummary = document.getElementById('aroundModalSummary');
+    const modalList = document.getElementById('aroundModalList');
+
+    if (!modalList || !modalSummary) return;
+
+    if (modalTitle) {
+        modalTitle.textContent = `日志上下文 - ${log.source}`;
+    }
+
+    modalSummary.textContent = '正在加载上下文...';
+    modalList.innerHTML = '';
+    openModal('aroundModal');
+
+    try {
+        const logs = await loadLogsForSource(log.source);
+        if (!logs.length) {
+            modalSummary.textContent = '未找到可展示的上下文日志。';
+            return;
+        }
+
+        let targetIndex = typeof log.sequence === 'number'
+            ? log.sequence
+            : logs.findIndex(item => item.content === log.content && item.timestamp?.getTime() === log.timestamp?.getTime());
+
+        if (targetIndex < 0) {
+            targetIndex = Math.min(logs.length - 1, 0);
+        }
+
+        const start = Math.max(0, targetIndex - 100);
+        const end = Math.min(logs.length - 1, targetIndex + 100);
+        const slice = logs.slice(start, end + 1);
+        const keywords = state.activeKeywords && state.activeKeywords.length > 0
+            ? state.activeKeywords
+            : document.getElementById('keywords').value.trim().split('\n').filter(k => k.trim());
+
+        modalSummary.textContent = `共 ${logs.length} 条日志，展示第 ${start + 1} - ${end + 1} 条（命中第 ${targetIndex + 1} 条）`;
+        modalList.innerHTML = slice.map((entry, offset) => {
+            const actualIndex = start + offset;
+            const isActive = actualIndex === targetIndex;
+            return `
+                <div class="around-item ${isActive ? 'active' : ''}">
+                    <div class="log-header">
+                        <div>
+                            <div class="log-timestamp">${entry.timestamp.toLocaleString()}</div>
+                            <div class="log-source">${entry.source}</div>
+                        </div>
+                    </div>
+                    <div class="log-content">${highlightKeywords(entry.content, keywords)}</div>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('加载上下文失败:', error);
+        modalSummary.textContent = `加载上下文失败: ${error.message}`;
+        showStatusMessage(`上下文加载失败: ${error.message}`, 'error');
+    }
+}
+
+async function loadLogsForSource(source) {
+    if (logCache.has(source)) {
+        return logCache.get(source);
+    }
+
+    const task = findTaskBySource(source);
+    if (!task) {
+        throw new Error('未找到对应的日志来源');
+    }
+
+    const content = await readContentForTask(task);
+    const logs = parseLogsFromContent(content, source);
+    logCache.set(source, logs);
+    return logs;
+}
+
+function findTaskBySource(source) {
+    for (const fileInfo of state.fileList) {
+        if (fileInfo.subFiles && fileInfo.subFiles.length > 0) {
+            const subFile = fileInfo.subFiles.find(item => item.name === source);
+            if (subFile) {
+                return { type: 'subFile', data: subFile };
+            }
+        }
+
+        if (fileInfo.file && fileInfo.file.name === source) {
+            return { type: 'file', data: fileInfo.file };
+        }
+    }
+
+    if (state.remoteLogData && state.remoteLogData.subFiles) {
+        const remoteFile = state.remoteLogData.subFiles.find(item => item.name === source);
+        if (remoteFile) {
+            return { type: 'subFile', data: remoteFile };
+        }
+    }
+
+    return null;
+}
+
+async function readContentForTask(task) {
+    if (task.type === 'file') {
+        if (task.data.name.endsWith('.gz')) {
+            const arrayBuffer = await task.data.arrayBuffer();
+            const compressed = new Uint8Array(arrayBuffer);
+            return decompressGzipFile(compressed, task.data.name);
+        }
+        return task.data.text();
+    }
+
+    if (task.type === 'subFile') {
+        if (task.data.name.endsWith('.gz')) {
+            return decompressGzipFile(task.data.data, task.data.name);
+        }
+        const decoder = new TextDecoder('utf-8', { fatal: false });
+        return decoder.decode(task.data.data);
+    }
+
+    return '';
+}
+
+function parseLogsFromContent(content, source) {
+    const timestampRegex = /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}/;
+    const logs = [];
+    let currentLog = null;
+    let logIndex = 0;
+
+    for (const line of iterateLines(content)) {
+        if (timestampRegex.test(line)) {
+            if (currentLog) {
+                logs.push(currentLog);
+            }
+
+            currentLog = {
+                timestamp: extractTimestamp(line),
+                content: line,
+                source: source,
+                sequence: logIndex
+            };
+            logIndex++;
+        } else if (currentLog) {
+            currentLog.content += '\n' + line;
+        }
+    }
+
+    if (currentLog) {
+        logs.push(currentLog);
+    }
+
+    return logs;
 }
 
 /**
