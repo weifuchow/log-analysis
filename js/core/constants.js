@@ -95,8 +95,7 @@ export const SEARCH_CONFIG = {
     BATCH_DELAY: 10,                 // 批处理延迟(ms)
     YIELD_INTERVAL: 1000,            // 让出控制权的间隔(行数)
     YIELD_DELAY: 0,                  // 让出控制权的延迟(ms)
-    REALTIME_DISPLAY_LIMIT: 100,     // 实时显示的结果数量限制
-    REALTIME_RENDER_INTERVAL: 200    // 实时渲染的最小间隔(ms)
+    REALTIME_DISPLAY_LIMIT: 100      // 实时显示的结果数量限制
 };
 
 // 时间范围类型

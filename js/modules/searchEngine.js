@@ -9,11 +9,16 @@ import { decompressGzipFile, extractFromZipBuffer, extractTimestamp } from '../u
 import { highlightKeywords } from '../utils/format.js';
 import { showStatusMessage, setButtonLoading } from '../utils/ui.js';
 
+const REALTIME_DISPLAY_LIMIT = SEARCH_CONFIG.REALTIME_DISPLAY_LIMIT || 100;
+const REALTIME_RENDER_INTERVAL = 200;
+const REALTIME_RENDER_BATCH_SIZE = 50;
+const REALTIME_QUEUE_LIMIT = REALTIME_DISPLAY_LIMIT * 4;
+
 // 实时结果渲染的缓冲区和控制变量
-let realtimeBuffer = [];
+let realtimeQueue = [];
 let realtimeWindow = [];
 let realtimeRenderTimer = null;
-let renderedRealtimeIds = new Set();
+let renderedRealtimeElements = new Map();
 
 /**
  * 解析关键词 DSL，支持 AND/OR/NOT 和括号
@@ -171,26 +176,34 @@ function buildDslFromKeywords(keywordList) {
 }
 
 function resetRealtimeRendering() {
-    realtimeBuffer = [];
+    realtimeQueue = [];
     realtimeWindow = [];
-    renderedRealtimeIds = new Set();
+    renderedRealtimeElements.clear();
     if (realtimeRenderTimer) {
         clearTimeout(realtimeRenderTimer);
         realtimeRenderTimer = null;
     }
 }
 
-function scheduleRealTimeUpdate(newResults = []) {
-    if (newResults.length > 0) {
-        realtimeBuffer.push(...newResults);
+function enqueueRealtimeResults(newResults) {
+    if (!newResults || newResults.length === 0) return;
+
+    realtimeQueue.push(...newResults);
+
+    if (realtimeQueue.length > REALTIME_QUEUE_LIMIT) {
+        realtimeQueue = realtimeQueue.slice(-REALTIME_QUEUE_LIMIT);
     }
+}
+
+function scheduleRealTimeUpdate(newResults = []) {
+    enqueueRealtimeResults(newResults);
 
     if (realtimeRenderTimer) return;
 
     realtimeRenderTimer = setTimeout(() => {
         realtimeRenderTimer = null;
         updateRealTimeResults();
-    }, SEARCH_CONFIG.REALTIME_RENDER_INTERVAL);
+    }, REALTIME_RENDER_INTERVAL);
 }
 
 /**
@@ -310,6 +323,10 @@ export async function performSearch() {
                 <div style="margin-top: 1rem;">正在搜索日志...</div>
             </div>
         `;
+        const realTimeContainer = document.getElementById('realTimeResults');
+        if (realTimeContainer) {
+            ensureRealTimeMarkListener(realTimeContainer);
+        }
 
         const beginTime = beginDate ? new Date(beginDate) : null;
         const endTime = endDate ? new Date(endDate) : null;
@@ -326,7 +343,7 @@ export async function performSearch() {
                 isResultLimitReached = true;
                 const allowedResults = results.slice(0, SEARCH_CONFIG.MAX_RESULTS - state.searchResults.length);
                 state.searchResults.push(...allowedResults);
-                updateRealTimeResults();
+                scheduleRealTimeUpdate(allowedResults);
                 return true; // 停止搜索
             }
 
@@ -602,6 +619,26 @@ function checkLogMatch(log, evaluateDsl, beginTime, endTime) {
     return evaluateDsl ? evaluateDsl(content) : false;
 }
 
+function ensureRealTimeMarkListener(container) {
+    if (container.dataset.markListenerAttached === 'true') return;
+
+    container.addEventListener('click', (event) => {
+        const button = event.target.closest('.mark-btn');
+        if (!button || !container.contains(button)) return;
+
+        const logId = button.dataset.logId;
+        const targetLog = state.searchResults.find(l => l.id === logId);
+        if (targetLog) {
+            // 动态导入workspace模块以避免循环依赖
+            import('./workspace.js').then(({ markLogById }) => {
+                markLogById(targetLog);
+            });
+        }
+    });
+
+    container.dataset.markListenerAttached = 'true';
+}
+
 /**
  * 实时更新搜索结果显示
  */
@@ -613,48 +650,52 @@ function updateRealTimeResults() {
 
     countSpan.textContent = `${state.searchResults.length} 条结果`;
 
-    if (realtimeBuffer.length > 0) {
-        realtimeWindow.push(...realtimeBuffer);
-        realtimeBuffer = [];
-    }
-
-    if (realtimeWindow.length === 0) {
-        renderedRealtimeIds.clear();
+    if (realtimeQueue.length === 0 && realtimeWindow.length === 0) {
+        renderedRealtimeElements.clear();
         realTimeContainer.innerHTML = '';
         return;
     }
 
-    realtimeWindow.sort((a, b) => a.timestamp - b.timestamp);
-
-    if (realtimeWindow.length > SEARCH_CONFIG.REALTIME_DISPLAY_LIMIT) {
-        realtimeWindow = realtimeWindow.slice(-SEARCH_CONFIG.REALTIME_DISPLAY_LIMIT);
+    const nextBatch = realtimeQueue.splice(0, REALTIME_RENDER_BATCH_SIZE);
+    if (nextBatch.length > 0) {
+        realtimeWindow.push(...nextBatch);
+        realtimeWindow.sort((a, b) => a.timestamp - b.timestamp);
     }
 
-    // 移除窗口之外的节点，保证DOM大小稳定
-    const latestIds = new Set(realtimeWindow.map(log => log.id));
-    Array.from(realTimeContainer.children).forEach(child => {
-        if (!latestIds.has(child.dataset.logId)) {
-            renderedRealtimeIds.delete(child.dataset.logId);
-            child.remove();
-        }
-    });
+    if (realtimeWindow.length > REALTIME_DISPLAY_LIMIT) {
+        const removed = realtimeWindow.splice(0, realtimeWindow.length - REALTIME_DISPLAY_LIMIT);
+        removed.forEach((log) => {
+            const element = renderedRealtimeElements.get(log.id);
+            if (element) {
+                element.remove();
+                renderedRealtimeElements.delete(log.id);
+            }
+        });
+    }
 
     const fragment = document.createDocumentFragment();
 
     realtimeWindow.forEach(log => {
-        if (!renderedRealtimeIds.has(log.id)) {
+        if (!renderedRealtimeElements.has(log.id)) {
             const element = createRealTimeLogElement(log);
             fragment.appendChild(element);
-            renderedRealtimeIds.add(log.id);
+            renderedRealtimeElements.set(log.id, element);
         }
     });
 
-    if (fragment.children.length > 0) {
+    if (fragment.childNodes.length > 0) {
         realTimeContainer.appendChild(fragment);
     }
 
     // 滚动到底部显示最新结果
     realTimeContainer.scrollTop = realTimeContainer.scrollHeight;
+
+    if (realtimeQueue.length > 0) {
+        realtimeRenderTimer = setTimeout(() => {
+            realtimeRenderTimer = null;
+            updateRealTimeResults();
+        }, REALTIME_RENDER_INTERVAL);
+    }
 }
 
 function createRealTimeLogElement(log) {
@@ -671,20 +712,6 @@ function createRealTimeLogElement(log) {
         </div>
         <div class="log-content">${highlightKeywords(log.content, state.activeKeywords)}</div>
     `;
-
-    const markBtn = wrapper.querySelector('.mark-btn');
-    if (markBtn) {
-        markBtn.addEventListener('click', function() {
-            const logId = this.dataset.logId;
-            const targetLog = state.searchResults.find(l => l.id === logId);
-            if (targetLog) {
-                // 动态导入workspace模块以避免循环依赖
-                import('./workspace.js').then(({ markLogById }) => {
-                    markLogById(targetLog);
-                });
-            }
-        });
-    }
 
     return wrapper;
 }
