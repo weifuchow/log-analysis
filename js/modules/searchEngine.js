@@ -13,6 +13,7 @@ const REALTIME_DISPLAY_LIMIT = SEARCH_CONFIG.REALTIME_DISPLAY_LIMIT || 100;
 const REALTIME_RENDER_INTERVAL = 200;
 const REALTIME_RENDER_BATCH_SIZE = 50;
 const REALTIME_QUEUE_LIMIT = REALTIME_DISPLAY_LIMIT * 4;
+const AROUND_CONTEXT_WINDOW = 5;
 
 // 实时结果渲染的缓冲区和控制变量
 let realtimeQueue = [];
@@ -623,16 +624,27 @@ function ensureRealTimeMarkListener(container) {
     if (container.dataset.markListenerAttached === 'true') return;
 
     container.addEventListener('click', (event) => {
-        const button = event.target.closest('.mark-btn');
-        if (!button || !container.contains(button)) return;
+        const aroundButton = event.target.closest('.around-btn');
+        const markButton = event.target.closest('.mark-btn');
 
-        const logId = button.dataset.logId;
-        const targetLog = state.searchResults.find(l => l.id === logId);
-        if (targetLog) {
-            // 动态导入workspace模块以避免循环依赖
-            import('./workspace.js').then(({ markLogById }) => {
-                markLogById(targetLog);
-            });
+        if (aroundButton && container.contains(aroundButton)) {
+            const logId = aroundButton.dataset.logId;
+            const targetLog = state.searchResults.find(l => l.id === logId);
+            if (targetLog) {
+                displayAroundResults(targetLog);
+            }
+            return;
+        }
+
+        if (markButton && container.contains(markButton)) {
+            const logId = markButton.dataset.logId;
+            const targetLog = state.searchResults.find(l => l.id === logId);
+            if (targetLog) {
+                // 动态导入workspace模块以避免循环依赖
+                import('./workspace.js').then(({ markLogById }) => {
+                    markLogById(targetLog);
+                });
+            }
         }
     });
 
@@ -708,7 +720,10 @@ function createRealTimeLogElement(log) {
                 <div class="log-timestamp">${log.timestamp.toLocaleString()}</div>
                 <div class="log-source">${log.source}</div>
             </div>
-            <button class="mark-btn" data-log-id="${log.id}">标记</button>
+            <div class="log-actions">
+                <button class="around-btn" data-log-id="${log.id}">Around</button>
+                <button class="mark-btn" data-log-id="${log.id}">标记</button>
+            </div>
         </div>
         <div class="log-content">${highlightKeywords(log.content, state.activeKeywords)}</div>
     `;
@@ -716,18 +731,51 @@ function createRealTimeLogElement(log) {
     return wrapper;
 }
 
-/**
- * 最终显示搜索结果
- */
-export function displaySearchResults() {
+function ensureSearchResultsListener(container) {
+    if (container.dataset.resultsListenerAttached === 'true') return;
+
+    container.addEventListener('click', (event) => {
+        const aroundButton = event.target.closest('.around-btn');
+        const markButton = event.target.closest('.mark-btn');
+        const backButton = event.target.closest('#backToAllResultsBtn');
+
+        if (backButton && container.contains(backButton)) {
+            displaySearchResults();
+            return;
+        }
+
+        if (aroundButton && container.contains(aroundButton)) {
+            const logId = aroundButton.dataset.logId;
+            const log = state.searchResults.find(l => l.id === logId);
+            if (log) {
+                displayAroundResults(log);
+            }
+            return;
+        }
+
+        if (markButton && container.contains(markButton)) {
+            const logId = markButton.dataset.logId;
+            const log = state.searchResults.find(l => l.id === logId);
+            if (log) {
+                import('./workspace.js').then(({ markLogById }) => {
+                    markLogById(log);
+                });
+            }
+        }
+    });
+
+    container.dataset.resultsListenerAttached = 'true';
+}
+
+function renderSearchResults(results, options = {}) {
     const container = document.getElementById('searchResults');
     const countSpan = document.getElementById('resultCount');
 
     if (!container) return;
 
-    countSpan.textContent = `${state.searchResults.length} 条结果`;
+    countSpan.textContent = `${results.length} 条结果`;
 
-    if (state.searchResults.length === 0) {
+    if (results.length === 0) {
         container.innerHTML = `
             <div style="padding: 2rem; text-align: center; color: #7f8c8d;">
                 <div style="font-size: 3rem; margin-bottom: 1rem;">🔍</div>
@@ -741,25 +789,31 @@ export function displaySearchResults() {
         ? state.activeKeywords
         : document.getElementById('keywords').value.trim().split('\n').filter(k => k.trim());
 
-    // 按时间排序
-    const sortedResults = [...state.searchResults].sort((a, b) => a.timestamp - b.timestamp);
+    const headerText = options.headerText || `显示所有 ${results.length} 条结果`;
+    const actions = `
+        ${options.showBackButton ? '<button id="backToAllResultsBtn" class="btn btn-secondary">返回全部</button>' : ''}
+        <button id="exportSearchResultsBtn" class="btn btn-secondary">导出结果</button>
+    `;
 
     container.innerHTML = `
         <div class="search-results-header">
-            <div>显示所有 ${sortedResults.length} 条结果</div>
+            <div>${headerText}</div>
             <div class="search-results-actions">
-                <button id="exportSearchResultsBtn" class="btn btn-secondary">导出结果</button>
+                ${actions}
             </div>
         </div>
         <div class="search-results-content">
-            ${sortedResults.map((log) => `
+            ${results.map((log) => `
                 <div class="log-item">
                     <div class="log-header">
                         <div>
                             <div class="log-timestamp">${log.timestamp.toLocaleString()}</div>
                             <div class="log-source">${log.source}</div>
                         </div>
-                        <button class="mark-btn" data-log-id="${log.id}">标记</button>
+                        <div class="log-actions">
+                            <button class="around-btn" data-log-id="${log.id}">Around</button>
+                            <button class="mark-btn" data-log-id="${log.id}">标记</button>
+                        </div>
                     </div>
                     <div class="log-content">${highlightKeywords(log.content, keywords)}</div>
                 </div>
@@ -767,24 +821,44 @@ export function displaySearchResults() {
         </div>
     `;
 
-    // 为标记按钮添加事件监听器
-    container.querySelectorAll('.mark-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const logId = this.dataset.logId;
-            const log = state.searchResults.find(l => l.id === logId);
-            if (log) {
-                import('./workspace.js').then(({ markLogById }) => {
-                    markLogById(log);
-                });
-            }
-        });
-    });
+    ensureSearchResultsListener(container);
 
-    // 为导出按钮添加事件监听器
     const exportBtn = document.getElementById('exportSearchResultsBtn');
     if (exportBtn) {
         exportBtn.addEventListener('click', exportSearchResults);
     }
+}
+
+function displayAroundResults(targetLog) {
+    const sortedResults = [...state.searchResults].sort((a, b) => a.timestamp - b.timestamp);
+    const index = sortedResults.findIndex(log => log.id === targetLog.id);
+    if (index === -1) {
+        showStatusMessage('未找到对应日志的上下文', 'info');
+        return;
+    }
+
+    const start = Math.max(0, index - AROUND_CONTEXT_WINDOW);
+    const end = Math.min(sortedResults.length, index + AROUND_CONTEXT_WINDOW + 1);
+    const aroundResults = sortedResults.slice(start, end);
+
+    renderSearchResults(aroundResults, {
+        headerText: `显示 Around 上下文 ${aroundResults.length} 条结果`,
+        showBackButton: true
+    });
+}
+
+/**
+ * 最终显示搜索结果
+ */
+export function displaySearchResults() {
+    const container = document.getElementById('searchResults');
+
+    if (!container) return;
+
+    // 按时间排序
+    const sortedResults = [...state.searchResults].sort((a, b) => a.timestamp - b.timestamp);
+
+    renderSearchResults(sortedResults);
 }
 
 /**
