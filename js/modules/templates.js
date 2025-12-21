@@ -5,6 +5,7 @@
 
 import { state } from '../core/state.js';
 import { PRESET_TEMPLATES } from '../core/constants.js';
+import { buildDslFromKeywords } from './searchEngine.js';
 import { getLocalStorage, setLocalStorage } from '../utils/storage.js';
 import { showStatusMessage, closeModal, openModal } from '../utils/ui.js';
 
@@ -131,8 +132,8 @@ function applyTemplateDsl(template, keywordList) {
         return;
     }
 
-    const operator = template.logic === 'or' ? ' OR ' : ' AND ';
-    dslInput.value = keywordList.join(operator);
+    const operator = template.logic === 'or' ? 'OR' : 'AND';
+    dslInput.value = buildDslFromKeywords(keywordList, operator);
 }
 
 /**

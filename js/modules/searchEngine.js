@@ -159,11 +159,68 @@ function evaluateAst(node, contentLower) {
 /**
  * 将关键词列表转换为安全的 DSL 表达式
  */
-function buildDslFromKeywords(keywordList) {
+export function buildDslFromKeywords(keywordList, operator = 'AND') {
+    const normalizedOperator = operator && operator.toUpperCase() === 'OR' ? ' OR ' : ' AND ';
     return keywordList
         .map(keyword => keyword.replace(/"/g, "'"))
         .map(keyword => `"${keyword}"`)
-        .join(' AND ');
+        .join(normalizedOperator);
+}
+
+const realTimeRenderState = {
+    renderedKeys: new Set(),
+    orderedKeys: [],
+    nodesByKey: new Map()
+};
+
+function getRealtimeKey(log) {
+    if (log.source && typeof log.sequence === 'number') {
+        return `${log.source}-${log.sequence}`;
+    }
+    const timestamp = log.timestamp instanceof Date ? log.timestamp.getTime() : log.timestamp;
+    return `${log.source}-${timestamp}-${log.content}`;
+}
+
+function createLogItemElement(log, keywords) {
+    const item = document.createElement('div');
+    item.className = 'log-item';
+    item.innerHTML = `
+        <div class="log-header">
+            <div>
+                <div class="log-timestamp">${log.timestamp.toLocaleString()}</div>
+                <div class="log-source">${log.source}</div>
+            </div>
+            <div class="log-actions">
+                <button class="around-btn" data-log-id="${log.id}">Around</button>
+                <button class="mark-btn" data-log-id="${log.id}">标记</button>
+            </div>
+        </div>
+        <div class="log-content">${highlightKeywords(log.content, keywords)}</div>
+    `;
+
+    const aroundBtn = item.querySelector('.around-btn');
+    if (aroundBtn) {
+        aroundBtn.addEventListener('click', () => {
+            showAroundModal(log);
+        });
+    }
+
+    const markBtn = item.querySelector('.mark-btn');
+    if (markBtn) {
+        markBtn.addEventListener('click', () => {
+            import('./workspace.js').then(({ markLogById }) => {
+                markLogById(log);
+            });
+        });
+    }
+
+    return item;
+}
+
+function resetRealTimeRenderState() {
+    realTimeRenderState.renderedKeys.clear();
+    realTimeRenderState.orderedKeys = [];
+    realTimeRenderState.nodesByKey.clear();
 }
 
 /**
@@ -282,6 +339,7 @@ export async function performSearch() {
 
         state.searchResults = [];
         logCache.clear();
+        resetRealTimeRenderState();
         let isResultLimitReached = false;
 
         countSpan.textContent = '搜索中...';
@@ -308,12 +366,12 @@ export async function performSearch() {
                 isResultLimitReached = true;
                 const allowedResults = results.slice(0, SEARCH_CONFIG.MAX_RESULTS - state.searchResults.length);
                 state.searchResults.push(...allowedResults);
-                updateRealTimeResults();
+                updateRealTimeResults(allowedResults);
                 return true; // 停止搜索
             }
 
             state.searchResults.push(...results);
-            updateRealTimeResults();
+            updateRealTimeResults(results);
             return false; // 继续搜索
         });
 
@@ -587,61 +645,75 @@ function checkLogMatch(log, evaluateDsl, beginTime, endTime) {
 /**
  * 实时更新搜索结果显示
  */
-function updateRealTimeResults() {
+function updateRealTimeResults(newResults = [], { reset = false } = {}) {
     const realTimeContainer = document.getElementById('realTimeResults');
     const countSpan = document.getElementById('resultCount');
 
     if (!realTimeContainer) return;
 
+    if (reset) {
+        resetRealTimeRenderState();
+        realTimeContainer.innerHTML = '';
+    }
+
     countSpan.textContent = `${state.searchResults.length} 条结果`;
 
-    // 按时间排序最新的结果
-    const sortedResults = [...state.searchResults].sort((a, b) => a.timestamp - b.timestamp);
+    if (!newResults.length) {
+        if (state.searchResults.length === 0) {
+            resetRealTimeRenderState();
+            realTimeContainer.innerHTML = '';
+        }
+        return;
+    }
 
-    // 只显示最新的100条结果，避免DOM过大
-    const displayResults = sortedResults.slice(-SEARCH_CONFIG.REALTIME_DISPLAY_LIMIT);
+    const keywords = state.activeKeywords && state.activeKeywords.length > 0
+        ? state.activeKeywords
+        : document.getElementById('keywords').value.trim().split('\n').filter(k => k.trim());
 
-    realTimeContainer.innerHTML = displayResults.map((log) => `
-        <div class="log-item">
-            <div class="log-header">
-                <div>
-                    <div class="log-timestamp">${log.timestamp.toLocaleString()}</div>
-                    <div class="log-source">${log.source}</div>
-                </div>
-                <div class="log-actions">
-                    <button class="around-btn" data-log-id="${log.id}">Around</button>
-                    <button class="mark-btn" data-log-id="${log.id}">标记</button>
-                </div>
-            </div>
-            <div class="log-content">${highlightKeywords(log.content, state.activeKeywords)}</div>
-        </div>
-    `).join('');
+    const containerChildren = realTimeContainer.children;
 
-    realTimeContainer.querySelectorAll('.around-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const logId = this.dataset.logId;
-            const log = state.searchResults.find(l => l.id === logId);
-            if (log) {
-                showAroundModal(log);
+    newResults.forEach((log) => {
+        const key = getRealtimeKey(log);
+        if (realTimeRenderState.renderedKeys.has(key)) {
+            return;
+        }
+
+        const timestampValue = log.timestamp instanceof Date ? log.timestamp.getTime() : log.timestamp;
+        const node = createLogItemElement(log, keywords);
+
+        let insertIndex = realTimeRenderState.orderedKeys.length;
+        for (let i = realTimeRenderState.orderedKeys.length - 1; i >= 0; i--) {
+            const existingKey = realTimeRenderState.orderedKeys[i];
+            const existingLog = realTimeRenderState.nodesByKey.get(existingKey)?.log;
+            const existingTimestamp = existingLog?.timestamp instanceof Date
+                ? existingLog.timestamp.getTime()
+                : existingLog?.timestamp;
+            if (existingTimestamp <= timestampValue) {
+                insertIndex = i + 1;
+                break;
             }
-        });
+            insertIndex = i;
+        }
+
+        const referenceNode = containerChildren[insertIndex] || null;
+        realTimeContainer.insertBefore(node, referenceNode);
+
+        realTimeRenderState.renderedKeys.add(key);
+        realTimeRenderState.orderedKeys.splice(insertIndex, 0, key);
+        realTimeRenderState.nodesByKey.set(key, { log, node });
     });
 
-    // 为新添加的标记按钮添加事件监听器
-    realTimeContainer.querySelectorAll('.mark-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const logId = this.dataset.logId;
-            const log = state.searchResults.find(l => l.id === logId);
-            if (log) {
-                // 动态导入workspace模块以避免循环依赖
-                import('./workspace.js').then(({ markLogById }) => {
-                    markLogById(log);
-                });
-            }
-        });
-    });
+    while (realTimeRenderState.orderedKeys.length > SEARCH_CONFIG.REALTIME_DISPLAY_LIMIT) {
+        const oldestKey = realTimeRenderState.orderedKeys.shift();
+        if (!oldestKey) break;
+        const entry = realTimeRenderState.nodesByKey.get(oldestKey);
+        if (entry?.node) {
+            entry.node.remove();
+        }
+        realTimeRenderState.nodesByKey.delete(oldestKey);
+        realTimeRenderState.renderedKeys.delete(oldestKey);
+    }
 
-    // 滚动到底部显示最新结果
     realTimeContainer.scrollTop = realTimeContainer.scrollHeight;
 }
 
@@ -916,6 +988,7 @@ export function clearSearch() {
     document.querySelectorAll('.template-btn').forEach(btn => btn.classList.remove('active'));
     state.searchResults = [];
     state.activeKeywords = [];
+    resetRealTimeRenderState();
     displaySearchResults();
     showStatusMessage('搜索条件已清空', 'info');
 }
