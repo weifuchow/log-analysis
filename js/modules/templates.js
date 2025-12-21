@@ -132,7 +132,10 @@ function applyTemplateDsl(template, keywordList) {
     }
 
     const operator = template.logic === 'or' ? ' OR ' : ' AND ';
-    dslInput.value = keywordList.join(operator);
+    const dslKeywords = keywordList
+        .map(keyword => keyword.replace(/"/g, "'"))
+        .map(keyword => `"${keyword}"`);
+    dslInput.value = dslKeywords.join(operator);
 }
 
 /**
