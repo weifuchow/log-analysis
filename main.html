@@ -999,6 +999,315 @@
     font-style: italic;
     margin: 10px 0;
 }
+
+        /* 暗黑科技风主题覆盖 */
+        :root {
+            color-scheme: dark;
+            --bg: #0a0f16;
+            --bg-soft: #0f1722;
+            --panel: #111b27;
+            --panel-strong: #162435;
+            --card: #0f1a25;
+            --border: #1f2e3d;
+            --border-strong: #2a3b4d;
+            --text: #e6f1ff;
+            --muted: #7f93a7;
+            --accent: #2ae4ff;
+            --accent-strong: #00b7ff;
+            --accent-warm: #8f6bff;
+            --danger: #ff5c7c;
+            --success: #2ee6a6;
+            --warning: #ffb454;
+            --glow: 0 0 20px rgba(42, 228, 255, 0.2);
+        }
+
+        body {
+            background: radial-gradient(circle at top, #111a26 0%, var(--bg) 60%);
+            color: var(--text);
+        }
+
+        .header {
+            background: linear-gradient(120deg, #0f1b27, #121f2e 55%, #162638);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .btn-header {
+            background: rgba(42, 228, 255, 0.08);
+            border: 1px solid rgba(42, 228, 255, 0.3);
+            color: var(--text);
+        }
+
+        .btn-header:hover {
+            background: rgba(42, 228, 255, 0.18);
+        }
+
+        .main-container {
+            background: transparent;
+        }
+
+        .panel {
+            background: var(--panel);
+            box-shadow: inset 0 0 0 1px var(--border), 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .panel-header {
+            background: linear-gradient(135deg, #16283b, #132231);
+            color: var(--text);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .panel-content {
+            color: var(--text);
+        }
+
+        .section-title {
+            color: var(--text);
+            border-bottom-color: var(--accent);
+        }
+
+        .upload-area {
+            background: linear-gradient(145deg, #0f1c28, #0b1620);
+            border-color: var(--border-strong);
+            color: var(--text);
+        }
+
+        .upload-area:hover {
+            border-color: var(--accent);
+            box-shadow: var(--glow);
+            background: linear-gradient(145deg, #112233, #0b1620);
+        }
+
+        .upload-area.dragover {
+            border-color: var(--accent-strong);
+            box-shadow: var(--glow);
+            background: linear-gradient(145deg, #112638, #0c1a27);
+        }
+
+        .form-group label,
+        .dsl-helper,
+        .ai-mode-toggle label {
+            color: var(--text);
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea,
+        .tag-input {
+            background: var(--bg-soft);
+            border: 1px solid var(--border);
+            color: var(--text);
+            box-shadow: inset 0 0 0 1px rgba(0, 183, 255, 0.05);
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus,
+        .tag-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(42, 228, 255, 0.15);
+        }
+
+        .helper-text,
+        .ai-summary-meta,
+        .history-meta,
+        .status-inline,
+        .file-size,
+        .info-value,
+        .sub-file-details {
+            color: var(--muted);
+        }
+
+        .btn,
+        .btn-inline,
+        .btn-time,
+        .template-btn {
+            background: linear-gradient(120deg, rgba(42, 228, 255, 0.15), rgba(143, 107, 255, 0.2));
+            color: var(--text);
+            border: 1px solid rgba(42, 228, 255, 0.35);
+            box-shadow: var(--glow);
+        }
+
+        .btn:hover,
+        .btn-inline:hover,
+        .btn-time:hover,
+        .template-btn:hover {
+            background: linear-gradient(120deg, rgba(42, 228, 255, 0.3), rgba(143, 107, 255, 0.3));
+        }
+
+        .btn-secondary {
+            background: rgba(42, 228, 255, 0.08);
+            border-color: rgba(42, 228, 255, 0.2);
+        }
+
+        .btn-danger,
+        .remove-btn {
+            background: linear-gradient(120deg, rgba(255, 92, 124, 0.6), rgba(255, 92, 124, 0.25));
+            border-color: rgba(255, 92, 124, 0.5);
+        }
+
+        .btn:disabled {
+            background: #263344;
+            color: var(--muted);
+            box-shadow: none;
+        }
+
+        .template-btn.active {
+            background: linear-gradient(135deg, rgba(42, 228, 255, 0.6), rgba(143, 107, 255, 0.5));
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        .file-item,
+        .template-item,
+        .history-list,
+        .summary-info,
+        .file-list,
+        .main-file,
+        .sub-file,
+        .workspace-item,
+        .log-item,
+        .around-item {
+            background: var(--card);
+            border: 1px solid var(--border);
+        }
+
+        .file-item,
+        .workspace-item,
+        .log-item,
+        .around-item {
+            border-bottom: 1px solid var(--border);
+        }
+
+        .log-item:hover,
+        .template-item:hover {
+            background: rgba(42, 228, 255, 0.08);
+        }
+
+        .log-timestamp,
+        .workspace-timestamp {
+            color: var(--muted);
+        }
+
+        .log-source,
+        .file-time-range,
+        .main-file,
+        .summary-header h4 {
+            color: var(--accent);
+        }
+
+        .highlight,
+        .around-item.active {
+            background: rgba(255, 180, 84, 0.18);
+            border-left-color: var(--warning);
+        }
+
+        .mark-btn,
+        .around-btn {
+            background: rgba(42, 228, 255, 0.2);
+            border: 1px solid rgba(42, 228, 255, 0.45);
+            color: var(--text);
+        }
+
+        .mark-btn:hover,
+        .around-btn:hover {
+            background: rgba(42, 228, 255, 0.35);
+        }
+
+        .workspace-ai-helper {
+            background: linear-gradient(160deg, #0f1823, #101b28);
+            border-top: 1px solid var(--border);
+        }
+
+        .ai-summary-section {
+            border-top-color: var(--border);
+        }
+
+        .progress-container {
+            background: #0f1b28;
+            border: 1px solid var(--border);
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, var(--accent), var(--accent-warm));
+        }
+
+        .status-success {
+            background: rgba(46, 230, 166, 0.1);
+            color: var(--success);
+            border-color: rgba(46, 230, 166, 0.35);
+        }
+
+        .status-error {
+            background: rgba(255, 92, 124, 0.1);
+            color: var(--danger);
+            border-color: rgba(255, 92, 124, 0.35);
+        }
+
+        .status-info {
+            background: rgba(42, 228, 255, 0.1);
+            color: var(--accent);
+            border-color: rgba(42, 228, 255, 0.35);
+        }
+
+        .modal {
+            background: rgba(8, 12, 18, 0.75);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+        }
+
+        .modal-header {
+            border-bottom-color: var(--border);
+        }
+
+        .modal-title {
+            color: var(--text);
+        }
+
+        .close-btn {
+            color: var(--muted);
+        }
+
+        .close-btn:hover {
+            color: var(--accent);
+        }
+
+        .summary-header h4 {
+            border-bottom-color: var(--accent);
+        }
+
+        .actual-range {
+            background: rgba(46, 230, 166, 0.1);
+            border-left-color: var(--success);
+        }
+
+        .actual-range .info-value {
+            color: var(--success);
+        }
+
+        .panel-content::-webkit-scrollbar-track,
+        .results-container::-webkit-scrollbar-track,
+        .workspace-content::-webkit-scrollbar-track {
+            background: #0c141d;
+        }
+
+        .panel-content::-webkit-scrollbar-thumb,
+        .results-container::-webkit-scrollbar-thumb,
+        .workspace-content::-webkit-scrollbar-thumb {
+            background: #1b2a39;
+        }
+
+        .panel-content::-webkit-scrollbar-thumb:hover,
+        .results-container::-webkit-scrollbar-thumb:hover,
+        .workspace-content::-webkit-scrollbar-thumb:hover {
+            background: #2a3f55;
+        }
     </style>
 </head>
 <body>
