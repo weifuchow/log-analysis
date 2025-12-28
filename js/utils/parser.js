@@ -288,42 +288,22 @@ async function decompressWithStream(buffer) {
     return new Uint8Array(decompressedBuffer);
 }
 
-async function ensureZstdCodecLoaded(fileName = '') {
-    if (typeof ZstdCodec !== 'undefined') {
-        return ZstdCodec;
-    }
-
-    if (typeof loadZstdCodec === 'function') {
-        try {
-            return await loadZstdCodec();
-        } catch (error) {
-            throw new Error(`加载 Zstd 解码器失败${fileName ? `（${fileName}）` : ''}: ${error.message}`);
-        }
-    }
-
-    throw new Error(`无法解压 ${fileName}：Zstd 解码器未加载`);
-}
-
 export async function decompressZstdFile(buffer, fileName = '') {
+    // 首先尝试使用浏览器原生 DecompressionStream (Chrome 118+)
     try {
         return await decompressWithStream(buffer);
     } catch (streamError) {
-        console.warn('DecompressionStream 解压失败，尝试使用 ZstdCodec:', streamError);
+        console.warn('DecompressionStream 不可用，使用 fzstd 回退:', streamError);
     }
 
+    // 回退到 fzstd 库
     try {
-        const codec = await ensureZstdCodecLoaded(fileName);
-        const zstd = await new Promise((resolve, reject) => {
-            try {
-                codec.run(resolve);
-            } catch (err) {
-                reject(err);
-            }
-        });
+        if (typeof fzstd === 'undefined') {
+            throw new Error('fzstd 库未加载');
+        }
 
-        const simple = new zstd.Simple();
         const input = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-        return simple.decompress(input);
+        return fzstd.decompress(input);
     } catch (error) {
         console.error('Zstd 解压失败:', error);
         throw new Error(`无法解压 ${fileName}: ${error.message}`);
