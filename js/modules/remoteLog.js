@@ -4,7 +4,7 @@
  */
 
 import { state } from '../core/state.js';
-import { SimpleTarReader, extractTimeRangeFromTarEntry } from '../utils/parser.js';
+import { SimpleTarReader, extractTimeRangeFromTarEntry, decompressZstdFile } from '../utils/parser.js';
 import { getStorageValue, getLocalStorage, setLocalStorage } from '../utils/storage.js';
 import { formatFileSize } from '../utils/format.js';
 import { showStatusMessage, updateProgressBar, toggleElement } from '../utils/ui.js';
@@ -126,7 +126,12 @@ export async function fetchRemoteLogs() {
  * 处理远程tar数据
  */
 async function processRemoteTarData(arrayBuffer, fileName) {
-    const tarReader = new SimpleTarReader(arrayBuffer);
+    let tarBuffer = new Uint8Array(arrayBuffer);
+    if (fileName && fileName.endsWith('.zst')) {
+        tarBuffer = await decompressZstdFile(tarBuffer, fileName);
+    }
+
+    const tarReader = new SimpleTarReader(tarBuffer);
     const entries = await tarReader.extractFiles();
 
     let overallStart = null;
@@ -134,9 +139,13 @@ async function processRemoteTarData(arrayBuffer, fileName) {
     const subFiles = [];
 
     for (const entry of entries) {
-        if (entry.name.endsWith('.gz') || entry.name.endsWith('.log')) {
+        if (!entry.name.toLowerCase().includes('log')) {
+            continue;
+        }
+
+        if (entry.name.endsWith('.gz') || entry.name.endsWith('.log') || entry.name.endsWith('.zst')) {
             try {
-                const timeRange = await extractTimeRangeFromTarEntry(entry);
+                const timeRange = await extractTimeRangeFromTarEntry(entry, { fileName: entry.name });
 
                 subFiles.push({
                     name: entry.name,

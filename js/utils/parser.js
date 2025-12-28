@@ -88,21 +88,77 @@ export class SimpleTarReader {
     }
 }
 
+const ISO_TIMESTAMP_REGEX = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3,6})/;
+const FLEXIBLE_DATE_TIME_REGEX = /(\d{4})[/-](\d{2})[/-](\d{2})\s+(\d{2}:\d{2}:\d{2}(?:\.\d{3,6})?)/;
+const GLOG_TIMESTAMP_REGEX = /^[IWEF](\d{2})(\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3,6})/;
+
+function normalizeMilliseconds(timeString) {
+    const [hms, fraction = ''] = timeString.split('.');
+    const ms = fraction.slice(0, 3).padEnd(3, '0');
+    return `${hms}.${ms}`;
+}
+
+function inferYearFromFileName(fileName) {
+    if (!fileName) return null;
+
+    const compactDateMatch = fileName.match(/(20\d{2})(\d{2})(\d{2})/);
+    if (compactDateMatch) {
+        return parseInt(compactDateMatch[1], 10);
+    }
+
+    const dashedDateMatch = fileName.match(/(20\d{2})[-/](\d{2})[-/](\d{2})/);
+    if (dashedDateMatch) {
+        return parseInt(dashedDateMatch[1], 10);
+    }
+
+    return null;
+}
+
+export function parseLogTimestamp(line, options = {}) {
+    const { fileName, fallbackYear } = options;
+    const inferredYear = fallbackYear ?? inferYearFromFileName(fileName);
+
+    let match = line.match(ISO_TIMESTAMP_REGEX);
+    if (match) {
+        const [, year, month, day, time] = match;
+        return new Date(`${year}-${month}-${day} ${normalizeMilliseconds(time)}`);
+    }
+
+    match = line.match(FLEXIBLE_DATE_TIME_REGEX);
+    if (match) {
+        const [, year, month, day, time] = match;
+        return new Date(`${year}-${month}-${day} ${normalizeMilliseconds(time)}`);
+    }
+
+    match = line.match(GLOG_TIMESTAMP_REGEX);
+    if (match) {
+        const [, month, day, time] = match;
+        const year = inferredYear ?? new Date().getFullYear();
+        return new Date(`${year}-${month}-${day} ${normalizeMilliseconds(time)}`);
+    }
+
+    return null;
+}
+
 /**
  * 从内容中提取时间范围
  */
-export function extractTimeRangeFromContent(content) {
-    const timestampRegex = /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}/;
+export function extractTimeRangeFromContent(content, options = {}) {
     let firstTimestamp = null;
     let lastTimestamp = null;
 
     const lines = content.split('\n');
+    const parserOptions = {
+        fileName: options.fileName,
+        fallbackYear: options.fallbackYear ?? inferYearFromFileName(options.fileName)
+    };
 
     // 查找第一个时间戳
     for (let i = 0; i < Math.min(lines.length, 1000); i++) {
         const line = lines[i];
-        if (timestampRegex.test(line)) {
-            firstTimestamp = extractTimestamp(line);
+        const ts = parseLogTimestamp(line, parserOptions);
+        if (ts) {
+            firstTimestamp = ts;
             break;
         }
     }
@@ -110,8 +166,9 @@ export function extractTimeRangeFromContent(content) {
     // 查找最后一个时间戳
     for (let i = Math.max(0, lines.length - 1000); i < lines.length; i++) {
         const line = lines[i];
-        if (timestampRegex.test(line)) {
-            lastTimestamp = extractTimestamp(line);
+        const ts = parseLogTimestamp(line, parserOptions);
+        if (ts) {
+            lastTimestamp = ts;
         }
     }
 
@@ -125,9 +182,8 @@ export function extractTimeRangeFromContent(content) {
 /**
  * 从日志行中提取时间戳
  */
-export function extractTimestamp(line) {
-    const match = line.match(/^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})/);
-    return match ? new Date(match[1]) : new Date();
+export function extractTimestamp(line, options = {}) {
+    return parseLogTimestamp(line, options);
 }
 
 /**
@@ -216,14 +272,62 @@ export async function decompressGzipFile(buffer, fileName) {
     }
 }
 
+async function decompressWithStream(buffer) {
+    if (typeof DecompressionStream === 'undefined') {
+        throw new Error('当前环境不支持 DecompressionStream');
+    }
+
+    const inputBuffer = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+    const stream = new DecompressionStream('zstd');
+    const writer = stream.writable.getWriter();
+    await writer.write(inputBuffer);
+    await writer.close();
+
+    const response = new Response(stream.readable);
+    const decompressedBuffer = await response.arrayBuffer();
+    return new Uint8Array(decompressedBuffer);
+}
+
+export async function decompressZstdFile(buffer, fileName = '') {
+    try {
+        return await decompressWithStream(buffer);
+    } catch (streamError) {
+        console.warn('DecompressionStream 解压失败，尝试使用 ZstdCodec:', streamError);
+    }
+
+    if (typeof ZstdCodec === 'undefined') {
+        throw new Error(`无法解压 ${fileName}：Zstd 解码器未加载`);
+    }
+
+    try {
+        const zstd = await new Promise((resolve, reject) => {
+            try {
+                ZstdCodec.run(resolve);
+            } catch (err) {
+                reject(err);
+            }
+        });
+
+        const simple = new zstd.Simple();
+        return simple.decompress(buffer);
+    } catch (error) {
+        console.error('Zstd 解压失败:', error);
+        throw new Error(`无法解压 ${fileName}: ${error.message}`);
+    }
+}
+
 /**
  * 从tar条目中提取时间范围
  */
-export async function extractTimeRangeFromTarEntry(entry) {
+export async function extractTimeRangeFromTarEntry(entry, options = {}) {
     let content;
 
     if (entry.name.endsWith('.gz')) {
         content = await decompressGzipFile(entry.buffer, entry.name);
+    } else if (entry.name.endsWith('.zst')) {
+        const decompressed = await decompressZstdFile(entry.buffer, entry.name);
+        const decoder = new TextDecoder('utf-8', { fatal: false, ignoreBOM: true });
+        content = decoder.decode(decompressed);
     } else {
         const decoder = new TextDecoder('utf-8', { fatal: false, ignoreBOM: true });
         content = decoder.decode(entry.buffer);
@@ -233,5 +337,5 @@ export async function extractTimeRangeFromTarEntry(entry) {
         throw new Error(`文件 ${entry.name} 解压后内容为空`);
     }
 
-    return extractTimeRangeFromContent(content);
+    return extractTimeRangeFromContent(content, { ...options, fileName: options.fileName ?? entry.name });
 }
