@@ -428,11 +428,6 @@ function buildSearchTasks(readyFiles) {
 
     // 本地文件任务
     for (const fileInfo of readyFiles) {
-        // 跳过未选中的文件
-        if (!fileInfo.selected) {
-            continue;
-        }
-
         if (fileInfo.subFiles.length > 0) {
             // tar包中的子文件 - 只包含选中的子文件
             for (const subFile of fileInfo.subFiles) {
@@ -445,12 +440,14 @@ function buildSearchTasks(readyFiles) {
                 }
             }
         } else {
-            // 单个文件
-            searchTasks.push({
-                type: 'file',
-                data: fileInfo.file,
-                source: fileInfo.file.name
-            });
+            // 单个文件 - 检查是否选中
+            if (fileInfo.selected) {
+                searchTasks.push({
+                    type: 'file',
+                    data: fileInfo.file,
+                    source: fileInfo.file.name
+                });
+            }
         }
     }
 
