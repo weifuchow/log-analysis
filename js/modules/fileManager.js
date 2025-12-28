@@ -80,8 +80,7 @@ export function addFileToList(file) {
         size: file.size,
         status: FILE_STATUS.PROCESSING,
         timeRange: null,
-        subFiles: [], // 用于tar包中的子文件
-        selected: true // 默认选中
+        subFiles: [] // 用于tar包中的子文件
     };
 
     state.fileList.push(fileInfo);
@@ -173,8 +172,7 @@ async function processTarBuffer(buffer, fileInfo, sourceName) {
                     name: entry.name,
                     size: entry.size,
                     timeRange: timeRange,
-                    data: entry.buffer,
-                    selected: true // 默认选中
+                    data: entry.buffer
                 };
 
                 fileInfo.subFiles.push(subFileInfo);
@@ -240,10 +238,6 @@ export function updateFileListDisplay() {
 
     fileListContainer.innerHTML = state.fileList.map((fileInfo, index) => `
         <div class="file-item">
-            <input type="checkbox"
-                   class="file-item-checkbox"
-                   data-file-index="${index}"
-                   ${fileInfo.selected ? 'checked' : ''}>
             <div class="file-info">
                 <div class="file-name">${fileInfo.name}</div>
                 <div class="file-size">${formatFileSize(fileInfo.size)}</div>
@@ -257,22 +251,15 @@ export function updateFileListDisplay() {
                 ` : ''}
                 ${fileInfo.subFiles.length > 0 ? `
                     <div class="sub-files">
-                        ${fileInfo.subFiles.map((subFile, subIndex) => `
+                        ${fileInfo.subFiles.map(subFile => `
                             <div class="sub-file-item">
-                                <input type="checkbox"
-                                       class="sub-file-checkbox"
-                                       data-file-index="${index}"
-                                       data-subfile-index="${subIndex}"
-                                       ${subFile.selected ? 'checked' : ''}>
-                                <div class="sub-file-info">
-                                    <div class="file-name">${subFile.name}</div>
-                                    <div class="file-size">${formatFileSize(subFile.size)}</div>
-                                    ${subFile.timeRange ? `
-                                        <div class="file-time-range">
-                                            ${subFile.timeRange.start.toLocaleString()} ~ ${subFile.timeRange.end.toLocaleString()}
-                                        </div>
-                                    ` : ''}
-                                </div>
+                                <div class="file-name">${subFile.name}</div>
+                                <div class="file-size">${formatFileSize(subFile.size)}</div>
+                                ${subFile.timeRange ? `
+                                    <div class="file-time-range">
+                                        ${subFile.timeRange.start.toLocaleString()} ~ ${subFile.timeRange.end.toLocaleString()}
+                                    </div>
+                                ` : ''}
                             </div>
                         `).join('')}
                     </div>
@@ -289,64 +276,6 @@ export function updateFileListDisplay() {
             removeFile(index);
         });
     });
-
-    // 为文件复选框添加事件监听器
-    fileListContainer.querySelectorAll('.file-item-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const fileIndex = parseInt(this.dataset.fileIndex);
-            toggleFileSelection(fileIndex, this.checked);
-        });
-    });
-
-    // 为子文件复选框添加事件监听器
-    fileListContainer.querySelectorAll('.sub-file-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const fileIndex = parseInt(this.dataset.fileIndex);
-            const subFileIndex = parseInt(this.dataset.subfileIndex);
-            toggleSubFileSelection(fileIndex, subFileIndex, this.checked);
-        });
-    });
-}
-
-/**
- * 切换文件选择状态
- */
-function toggleFileSelection(fileIndex, selected) {
-    const fileInfo = state.fileList[fileIndex];
-    if (!fileInfo) return;
-
-    fileInfo.selected = selected;
-
-    // 如果文件有子文件，同时更新所有子文件的选择状态
-    if (fileInfo.subFiles.length > 0) {
-        fileInfo.subFiles.forEach(subFile => {
-            subFile.selected = selected;
-        });
-        updateFileListDisplay();
-    }
-
-    showStatusMessage(`${selected ? '选中' : '取消选中'} ${fileInfo.name}`, 'info');
-}
-
-/**
- * 切换子文件选择状态
- */
-function toggleSubFileSelection(fileIndex, subFileIndex, selected) {
-    const fileInfo = state.fileList[fileIndex];
-    if (!fileInfo || !fileInfo.subFiles[subFileIndex]) return;
-
-    fileInfo.subFiles[subFileIndex].selected = selected;
-
-    // 检查是否所有子文件都被选中，如果是则选中父文件，否则取消选中父文件
-    const allSelected = fileInfo.subFiles.every(subFile => subFile.selected);
-    const anySelected = fileInfo.subFiles.some(subFile => subFile.selected);
-
-    fileInfo.selected = allSelected;
-
-    // 如果部分选中，保持父复选框的状态不确定（这里简化为根据全选状态）
-    updateFileListDisplay();
-
-    showStatusMessage(`${selected ? '选中' : '取消选中'} ${fileInfo.subFiles[subFileIndex].name}`, 'info');
 }
 
 /**
