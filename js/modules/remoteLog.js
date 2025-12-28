@@ -151,7 +151,8 @@ async function processRemoteTarData(arrayBuffer, fileName) {
                     name: entry.name,
                     size: entry.size,
                     timeRange: timeRange,
-                    data: entry.buffer
+                    data: entry.buffer,
+                    selected: true // 默认选中
                 });
 
                 if (!overallStart || timeRange.start < overallStart) {
@@ -220,11 +221,18 @@ function showRemoteLogsSummary(logData, beginDate, endDate) {
         const lineSymbol = isLast ? '&nbsp;&nbsp;&nbsp;' : '│&nbsp;&nbsp;';
 
         subFileListHtml += `
-            <div class="sub-file">
-                &nbsp;&nbsp;${treeSymbol} 📄 <strong>${subFile.name}</strong>
-                <div class="sub-file-details">
-                    &nbsp;&nbsp;${lineSymbol}&nbsp;💾 大小: ${sizeText}
-                    <br>&nbsp;&nbsp;${lineSymbol}&nbsp;⏰ 时间: ${timeRangeText}
+            <div class="sub-file" style="display: flex; align-items: flex-start; margin-bottom: 0.5rem;">
+                <input type="checkbox"
+                       class="remote-subfile-checkbox"
+                       data-subfile-index="${index}"
+                       ${subFile.selected ? 'checked' : ''}
+                       style="margin-right: 0.5rem; margin-top: 0.2rem; cursor: pointer;">
+                <div style="flex: 1;">
+                    &nbsp;&nbsp;${treeSymbol} 📄 <strong>${subFile.name}</strong>
+                    <div class="sub-file-details">
+                        &nbsp;&nbsp;${lineSymbol}&nbsp;💾 大小: ${sizeText}
+                        <br>&nbsp;&nbsp;${lineSymbol}&nbsp;⏰ 时间: ${timeRangeText}
+                    </div>
                 </div>
             </div>
         `;
@@ -270,4 +278,23 @@ function showRemoteLogsSummary(logData, beginDate, endDate) {
 
     summaryContainer.innerHTML = html;
     summaryContainer.style.display = 'block';
+
+    // 为远程日志子文件复选框添加事件监听器
+    summaryContainer.querySelectorAll('.remote-subfile-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const subFileIndex = parseInt(this.dataset.subfileIndex);
+            toggleRemoteSubFileSelection(subFileIndex, this.checked);
+        });
+    });
+}
+
+/**
+ * 切换远程日志子文件选择状态
+ */
+function toggleRemoteSubFileSelection(subFileIndex, selected) {
+    if (!state.remoteLogData || !state.remoteLogData.subFiles[subFileIndex]) return;
+
+    state.remoteLogData.subFiles[subFileIndex].selected = selected;
+
+    showStatusMessage(`${selected ? '选中' : '取消选中'} ${state.remoteLogData.subFiles[subFileIndex].name}`, 'info');
 }
