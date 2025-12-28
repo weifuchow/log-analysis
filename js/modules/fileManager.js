@@ -147,35 +147,46 @@ async function processTarBuffer(buffer, fileInfo, sourceName) {
         for (const entry of entries) {
             console.log('处理TAR条目:', entry.name, '大小:', entry.size);
 
-            if (!entry.name.toLowerCase().includes('log')) {
+            // 判断是否为日志文件（支持多种命名模式）
+            const isLogFile =
+                entry.name.endsWith('.gz') ||
+                entry.name.endsWith('.log') ||
+                entry.name.endsWith('.zst') ||
+                entry.name.includes('sros.') ||
+                entry.name.includes('srtos.') ||
+                entry.name.includes('.INFO.') ||
+                entry.name.includes('.WARN.') ||
+                entry.name.includes('.ERROR.') ||
+                entry.name.includes('.FATAL.') ||
+                entry.name.toLowerCase().includes('log');
+
+            if (!isLogFile) {
                 continue;
             }
 
-            if (entry.name.endsWith('.gz') || entry.name.endsWith('.log') || entry.name.endsWith('.zst')) {
-                try {
-                    // 获取文件时间范围
-                    const timeRange = await extractTimeRangeFromTarEntry(entry, { fileName: entry.name });
+            try {
+                // 获取文件时间范围
+                const timeRange = await extractTimeRangeFromTarEntry(entry, { fileName: entry.name });
 
-                    const subFileInfo = {
-                        name: entry.name,
-                        size: entry.size,
-                        timeRange: timeRange,
-                        data: entry.buffer
-                    };
+                const subFileInfo = {
+                    name: entry.name,
+                    size: entry.size,
+                    timeRange: timeRange,
+                    data: entry.buffer
+                };
 
-                    fileInfo.subFiles.push(subFileInfo);
+                fileInfo.subFiles.push(subFileInfo);
 
-                    if (!overallStart || timeRange.start < overallStart) {
-                        overallStart = timeRange.start;
-                    }
-                    if (!overallEnd || timeRange.end > overallEnd) {
-                        overallEnd = timeRange.end;
-                    }
-
-                    console.log('子文件时间范围:', entry.name, timeRange);
-                } catch (error) {
-                    console.warn(`处理tar子文件 ${entry.name} 时出错:`, error);
+                if (!overallStart || timeRange.start < overallStart) {
+                    overallStart = timeRange.start;
                 }
+                if (!overallEnd || timeRange.end > overallEnd) {
+                    overallEnd = timeRange.end;
+                }
+
+                console.log('子文件时间范围:', entry.name, timeRange);
+            } catch (error) {
+                console.warn(`处理tar子文件 ${entry.name} 时出错:`, error);
             }
         }
 
