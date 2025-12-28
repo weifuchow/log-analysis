@@ -334,21 +334,6 @@ export async function performSearch() {
         return;
     }
 
-    // 检查是否有选中的文件
-    const hasSelectedLocalFiles = readyFiles.some(f => {
-        if (f.subFiles.length > 0) {
-            return f.subFiles.some(sf => sf.selected);
-        }
-        return f.selected;
-    });
-    const hasSelectedRemoteFiles = state.remoteLogData && state.remoteLogData.subFiles &&
-        state.remoteLogData.subFiles.some(sf => sf.selected);
-
-    if (!hasSelectedLocalFiles && !hasSelectedRemoteFiles) {
-        showStatusMessage('请至少选择一个日志文件进行搜索', 'error');
-        return;
-    }
-
     const resultsContainer = document.getElementById('searchResults');
     const countSpan = document.getElementById('resultCount');
 
@@ -428,21 +413,14 @@ function buildSearchTasks(readyFiles) {
 
     // 本地文件任务
     for (const fileInfo of readyFiles) {
-        // 跳过未选中的文件
-        if (!fileInfo.selected) {
-            continue;
-        }
-
         if (fileInfo.subFiles.length > 0) {
-            // tar包中的子文件 - 只包含选中的子文件
+            // tar包中的子文件
             for (const subFile of fileInfo.subFiles) {
-                if (subFile.selected) {
-                    searchTasks.push({
-                        type: 'subFile',
-                        data: subFile,
-                        source: subFile.name
-                    });
-                }
+                searchTasks.push({
+                    type: 'subFile',
+                    data: subFile,
+                    source: subFile.name
+                });
             }
         } else {
             // 单个文件
@@ -454,16 +432,14 @@ function buildSearchTasks(readyFiles) {
         }
     }
 
-    // 远程日志任务 - 只包含选中的子文件
+    // 远程日志任务
     if (state.remoteLogData && state.remoteLogData.subFiles) {
         for (const subFile of state.remoteLogData.subFiles) {
-            if (subFile.selected) {
-                searchTasks.push({
-                    type: 'subFile',
-                    data: subFile,
-                    source: subFile.name
-                });
-            }
+            searchTasks.push({
+                type: 'subFile',
+                data: subFile,
+                source: subFile.name
+            });
         }
     }
 
