@@ -3,6 +3,18 @@
 // never be used. Otherwise, it attempts to fetch a prebuilt decoder from a CDN
 // and exposes a promise-returning loader function on `window.loadZstdCodec`.
 (function(global) {
+    const BUNDLED_DECODER = (() => {
+        if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
+            return chrome.runtime.getURL('libs/zstd-codec.min.js');
+        }
+
+        if (typeof browser !== 'undefined' && browser.runtime?.getURL) {
+            return browser.runtime.getURL('libs/zstd-codec.min.js');
+        }
+
+        return 'libs/zstd-codec.min.js';
+    })();
+
     const CDN_SOURCES = [
         'https://cdn.jsdelivr.net/npm/zstd-codec@0.1.22/dist/zstd-codec.min.js',
         'https://unpkg.com/zstd-codec@0.1.22/dist/zstd-codec.min.js'
@@ -35,9 +47,11 @@
             throw new Error('无法在非浏览器环境加载 Zstd 解码器');
         }
 
+        const sources = [BUNDLED_DECODER, ...CDN_SOURCES];
+
         loadPromise = (async () => {
             const errors = [];
-            for (const src of CDN_SOURCES) {
+            for (const src of sources) {
                 try {
                     return await injectScript(src);
                 } catch (error) {
