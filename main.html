@@ -318,14 +318,14 @@
 
         .file-item .file-info {
             flex: 1;
-            overflow: hidden;
+            min-width: 0;
         }
 
         .file-name {
             font-weight: 500;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            word-break: break-all;
+            white-space: normal;
+            line-height: 1.4;
         }
 
         .file-size {
