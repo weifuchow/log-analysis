@@ -288,15 +288,47 @@ async function decompressWithStream(buffer) {
     return new Uint8Array(decompressedBuffer);
 }
 
-export async function decompressZstdFile(buffer, fileName = '') {
+function hasZstdStreamSupport() {
+    if (typeof DecompressionStream === 'undefined') {
+        return false;
+    }
+
     try {
-        return await decompressWithStream(buffer);
-    } catch (streamError) {
-        console.warn('DecompressionStream 解压失败，尝试使用 ZstdCodec:', streamError);
+        // Some browsers expose DecompressionStream but do not support zstd.
+        new DecompressionStream('zstd');
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+export function isZstdDecoderAvailable() {
+    if (hasZstdStreamSupport()) {
+        return true;
     }
 
     if (typeof ZstdCodec === 'undefined') {
-        throw new Error(`无法解压 ${fileName}：Zstd 解码器未加载`);
+        return false;
+    }
+
+    return !ZstdCodec.isPlaceholder;
+}
+
+export async function decompressZstdFile(buffer, fileName = '') {
+    if (!isZstdDecoderAvailable()) {
+        throw new Error(
+            `无法解压 ${fileName}：当前环境缺少 Zstd 解码支持，请使用支持 DecompressionStream('zstd') 的浏览器，或提供编译后的 libs/zstddec.js`
+        );
+    }
+
+    if (hasZstdStreamSupport()) {
+        try {
+            return await decompressWithStream(buffer);
+        } catch (streamError) {
+            console.warn('DecompressionStream 解压失败，尝试使用 ZstdCodec:', streamError);
+        }
+    } else {
+        console.warn('当前环境支持 DecompressionStream 但不支持 zstd 格式，尝试使用 ZstdCodec 备用方案。');
     }
 
     try {
