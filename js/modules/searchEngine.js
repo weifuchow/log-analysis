@@ -5,11 +5,17 @@
 
 import { state } from '../core/state.js';
 import { SEARCH_CONFIG, FILE_STATUS } from '../core/constants.js';
-import { decompressGzipFile, extractFromZipBuffer, extractTimestamp } from '../utils/parser.js';
+import { decompressGzipFile, parseLogTimestamp, decompressZstdFile } from '../utils/parser.js';
 import { highlightKeywords } from '../utils/format.js';
 import { showStatusMessage, setButtonLoading, openModal } from '../utils/ui.js';
 
 const logCache = new Map();
+
+function decodeTextContent(buffer) {
+    const decoder = new TextDecoder('utf-8', { fatal: false, ignoreBOM: true });
+    const view = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+    return decoder.decode(view);
+}
 
 /**
  * 解析关键词 DSL，支持 AND/OR/NOT 和括号
@@ -524,6 +530,22 @@ async function preprocessTask(task) {
             return null;
         }
     }
+    if (task.type === 'file' && task.data.name.endsWith('.zst')) {
+        try {
+            const arrayBuffer = await task.data.arrayBuffer();
+            const decompressed = await decompressZstdFile(new Uint8Array(arrayBuffer), task.data.name);
+            const content = decodeTextContent(decompressed);
+
+            return {
+                type: 'preprocessed',
+                data: { content },
+                source: task.source
+            };
+        } catch (error) {
+            console.error(`预处理zst文件失败 ${task.source}:`, error);
+            return null;
+        }
+    }
     return task;
 }
 
@@ -542,15 +564,21 @@ async function processTaskInMainThread(task, searchParams) {
                 const arrayBuffer = await task.data.arrayBuffer();
                 const compressed = new Uint8Array(arrayBuffer);
                 content = await decompressGzipFile(compressed, task.data.name);
+            } else if (task.data.name.endsWith('.zst')) {
+                const arrayBuffer = await task.data.arrayBuffer();
+                const decompressed = await decompressZstdFile(new Uint8Array(arrayBuffer), task.data.name);
+                content = decodeTextContent(decompressed);
             } else {
                 content = await task.data.text();
             }
         } else if (task.type === 'subFile') {
             if (task.data.name.endsWith('.gz')) {
                 content = await decompressGzipFile(task.data.data, task.data.name);
+            } else if (task.data.name.endsWith('.zst')) {
+                const decompressed = await decompressZstdFile(task.data.data, task.data.name);
+                content = decodeTextContent(decompressed);
             } else {
-                const decoder = new TextDecoder('utf-8', { fatal: false });
-                content = decoder.decode(task.data.data);
+                content = decodeTextContent(task.data.data);
             }
         } else if (task.type === 'preprocessed') {
             content = task.data.content;
@@ -569,14 +597,15 @@ async function processTaskInMainThread(task, searchParams) {
     }
 
     // 解析日志内容
-    const timestampRegex = /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}/;
     let currentLog = null;
     let lineIndex = 0;
     let logIndex = 0;
+    const timestampOptions = { fileName: task.source };
 
     for (const line of iterateLines(content)) {
 
-        if (timestampRegex.test(line)) {
+        const timestamp = parseLogTimestamp(line, timestampOptions);
+        if (timestamp) {
             if (currentLog) {
                 const shouldAdd = checkLogMatch(currentLog, evaluate, beginTime, endTime);
                 if (shouldAdd) {
@@ -586,7 +615,7 @@ async function processTaskInMainThread(task, searchParams) {
             }
 
             currentLog = {
-                timestamp: extractTimestamp(line),
+                timestamp,
                 content: line,
                 source: task.source,
                 id: `${task.source}-${Date.now()}-${Math.random()}`,
@@ -908,6 +937,11 @@ async function readContentForTask(task) {
             const compressed = new Uint8Array(arrayBuffer);
             return decompressGzipFile(compressed, task.data.name);
         }
+        if (task.data.name.endsWith('.zst')) {
+            const arrayBuffer = await task.data.arrayBuffer();
+            const decompressed = await decompressZstdFile(new Uint8Array(arrayBuffer), task.data.name);
+            return decodeTextContent(decompressed);
+        }
         return task.data.text();
     }
 
@@ -915,27 +949,31 @@ async function readContentForTask(task) {
         if (task.data.name.endsWith('.gz')) {
             return decompressGzipFile(task.data.data, task.data.name);
         }
-        const decoder = new TextDecoder('utf-8', { fatal: false });
-        return decoder.decode(task.data.data);
+        if (task.data.name.endsWith('.zst')) {
+            const decompressed = await decompressZstdFile(task.data.data, task.data.name);
+            return decodeTextContent(decompressed);
+        }
+        return decodeTextContent(task.data.data);
     }
 
     return '';
 }
 
 function parseLogsFromContent(content, source) {
-    const timestampRegex = /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}/;
     const logs = [];
     let currentLog = null;
     let logIndex = 0;
+    const timestampOptions = { fileName: source };
 
     for (const line of iterateLines(content)) {
-        if (timestampRegex.test(line)) {
+        const timestamp = parseLogTimestamp(line, timestampOptions);
+        if (timestamp) {
             if (currentLog) {
                 logs.push(currentLog);
             }
 
             currentLog = {
-                timestamp: extractTimestamp(line),
+                timestamp,
                 content: line,
                 source: source,
                 sequence: logIndex

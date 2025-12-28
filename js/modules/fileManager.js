@@ -5,7 +5,13 @@
 
 import { state } from '../core/state.js';
 import { FILE_STATUS } from '../core/constants.js';
-import { SimpleTarReader, extractTimeRangeFromContent, decompressGzipFile, extractFromZipBuffer, extractTimeRangeFromTarEntry } from '../utils/parser.js';
+import {
+    SimpleTarReader,
+    extractTimeRangeFromContent,
+    decompressGzipFile,
+    extractTimeRangeFromTarEntry,
+    decompressZstdFile
+} from '../utils/parser.js';
 import { formatFileSize, getStatusText, formatDateForInput } from '../utils/format.js';
 import { showStatusMessage } from '../utils/ui.js';
 
@@ -94,9 +100,15 @@ async function preprocessFile(file) {
         fileInfo.status = FILE_STATUS.PROCESSING;
         updateFileListDisplay();
 
-        if (file.name.endsWith('.tar')) {
+        if (file.name.endsWith('.tar.zst')) {
+            console.log('处理tar.zst文件');
+            const arrayBuffer = await file.arrayBuffer();
+            const decompressedTar = await decompressZstdFile(new Uint8Array(arrayBuffer), file.name);
+            await processTarBuffer(decompressedTar, fileInfo, file.name);
+        } else if (file.name.endsWith('.tar')) {
             console.log('处理tar文件');
-            await processTarFile(file, fileInfo);
+            const arrayBuffer = await file.arrayBuffer();
+            await processTarBuffer(new Uint8Array(arrayBuffer), fileInfo, file.name);
         } else {
             console.log('处理普通文件');
             const timeRange = await extractTimeRangeFromFile(file);
@@ -120,14 +132,11 @@ async function preprocessFile(file) {
 /**
  * 处理TAR文件
  */
-async function processTarFile(file, fileInfo) {
-    console.log('处理TAR包:', file.name);
+async function processTarBuffer(buffer, fileInfo, sourceName) {
+    console.log('处理TAR包:', sourceName);
 
     try {
-        const arrayBuffer = await file.arrayBuffer();
-        console.log('TAR文件大小:', arrayBuffer.byteLength);
-
-        const tarReader = new SimpleTarReader(arrayBuffer);
+        const tarReader = new SimpleTarReader(buffer);
         const entries = await tarReader.extractFiles();
 
         console.log('TAR中找到的文件数量:', entries.length);
@@ -138,10 +147,14 @@ async function processTarFile(file, fileInfo) {
         for (const entry of entries) {
             console.log('处理TAR条目:', entry.name, '大小:', entry.size);
 
-            if (entry.name.endsWith('.gz') || entry.name.endsWith('.log')) {
+            if (!entry.name.toLowerCase().includes('log')) {
+                continue;
+            }
+
+            if (entry.name.endsWith('.gz') || entry.name.endsWith('.log') || entry.name.endsWith('.zst')) {
                 try {
                     // 获取文件时间范围
-                    const timeRange = await extractTimeRangeFromTarEntry(entry);
+                    const timeRange = await extractTimeRangeFromTarEntry(entry, { fileName: entry.name });
 
                     const subFileInfo = {
                         name: entry.name,
@@ -189,11 +202,16 @@ async function extractTimeRangeFromFile(file) {
             const arrayBuffer = await file.arrayBuffer();
             const compressed = new Uint8Array(arrayBuffer);
             content = await decompressGzipFile(compressed, file.name);
+        } else if (file.name.endsWith('.zst')) {
+            const arrayBuffer = await file.arrayBuffer();
+            const decompressed = await decompressZstdFile(new Uint8Array(arrayBuffer), file.name);
+            const decoder = new TextDecoder('utf-8', { fatal: false, ignoreBOM: true });
+            content = decoder.decode(decompressed);
         } else {
             content = await file.text();
         }
 
-        return extractTimeRangeFromContent(content);
+        return extractTimeRangeFromContent(content, { fileName: file.name });
     } catch (error) {
         console.error('提取时间范围失败:', error);
         throw new Error(`解析时间范围失败: ${error.message}`);
