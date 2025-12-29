@@ -548,6 +548,19 @@
             transition: all 0.2s ease;
         }
 
+        .around-item.active .log-content,
+        .around-item.active .log-timestamp,
+        .around-item.active .log-source {
+            color: #1a1a1a !important;
+            font-weight: 500;
+        }
+
+        .around-item.active .highlight {
+            background: rgba(255, 193, 7, 0.4);
+            color: #000;
+            font-weight: 600;
+        }
+
         /* 右侧面板 - 工作区 */
         .workspace {
             height: 100%;
@@ -1259,6 +1272,21 @@
             background: linear-gradient(to right, rgba(42, 228, 255, 0.2), rgba(42, 228, 255, 0.08));
             border-left-color: var(--accent);
             box-shadow: 0 2px 8px rgba(42, 228, 255, 0.3);
+        }
+
+        .around-item.active .log-content,
+        .around-item.active .log-timestamp,
+        .around-item.active .log-source {
+            color: #ffffff !important;
+            font-weight: 500;
+            text-shadow: 0 0 10px rgba(42, 228, 255, 0.3);
+        }
+
+        .around-item.active .highlight {
+            background: rgba(255, 193, 7, 0.35);
+            color: #fff;
+            font-weight: 600;
+            text-shadow: 0 0 5px rgba(255, 193, 7, 0.5);
         }
 
         .mark-btn,
