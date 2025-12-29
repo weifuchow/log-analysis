@@ -541,8 +541,11 @@
         }
 
         .around-item.active {
-            background: #fff3cd;
-            border-left: 4px solid #f39c12;
+            background: linear-gradient(to right, rgba(52, 152, 219, 0.15), rgba(52, 152, 219, 0.05));
+            border-left: 4px solid #3498db;
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.25);
+            transform: scale(1.01);
+            transition: all 0.2s ease;
         }
 
         /* 右侧面板 - 工作区 */
@@ -1248,10 +1251,14 @@
             color: var(--accent);
         }
 
-        .highlight,
-        .around-item.active {
+        .highlight {
             background: rgba(255, 180, 84, 0.18);
-            border-left-color: var(--warning);
+        }
+
+        .around-item.active {
+            background: linear-gradient(to right, rgba(42, 228, 255, 0.2), rgba(42, 228, 255, 0.08));
+            border-left-color: var(--accent);
+            box-shadow: 0 2px 8px rgba(42, 228, 255, 0.3);
         }
 
         .mark-btn,
