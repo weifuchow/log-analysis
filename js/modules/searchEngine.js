@@ -8,6 +8,7 @@ import { SEARCH_CONFIG, FILE_STATUS } from '../core/constants.js';
 import { decompressGzipFile, parseLogTimestamp, decompressZstdFile } from '../utils/parser.js';
 import { highlightKeywords } from '../utils/format.js';
 import { showStatusMessage, setButtonLoading, openModal } from '../utils/ui.js';
+import { markLogById } from './workspace.js';
 
 const logCache = new Map();
 
@@ -851,6 +852,14 @@ export function displaySearchResults() {
     }
 }
 
+/**
+ * 从弹窗中标记日志
+ */
+function markLogFromAround(log) {
+    if (!log) return;
+    markLogById(log);
+}
+
 async function showAroundModal(log) {
     const modalTitle = document.getElementById('aroundModalTitle');
     const modalSummary = document.getElementById('aroundModalSummary');
@@ -893,17 +902,31 @@ async function showAroundModal(log) {
             const actualIndex = start + offset;
             const isActive = actualIndex === targetIndex;
             return `
-                <div class="around-item ${isActive ? 'active' : ''}">
+                <div class="around-item ${isActive ? 'active' : ''}" data-index="${actualIndex}">
                     <div class="log-header">
                         <div>
                             <div class="log-timestamp">${entry.timestamp.toLocaleString()}</div>
                             <div class="log-source">${entry.source}</div>
                         </div>
+                        <button class="mark-btn mark-from-around">标记</button>
                     </div>
                     <div class="log-content">${highlightKeywords(entry.content, keywords)}</div>
                 </div>
             `;
         }).join('');
+
+        // 添加标记按钮的事件监听器
+        modalList.querySelectorAll('.mark-from-around').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const aroundItem = this.closest('.around-item');
+                const index = parseInt(aroundItem.dataset.index);
+                const logEntry = logs[index];
+                if (logEntry) {
+                    markLogFromAround(logEntry);
+                }
+            });
+        });
     } catch (error) {
         console.error('加载上下文失败:', error);
         modalSummary.textContent = `加载上下文失败: ${error.message}`;
@@ -997,6 +1020,7 @@ function parseLogsFromContent(content, source) {
                 timestamp,
                 content: line,
                 source: source,
+                id: `${source}-${Date.now()}-${Math.random()}`,
                 sequence: logIndex
             };
             logIndex++;
