@@ -16,8 +16,10 @@
     })();
 
     const CDN_SOURCES = [
-        'https://cdn.jsdelivr.net/npm/zstd-codec@0.1.22/dist/zstd-codec.min.js',
-        'https://unpkg.com/zstd-codec@0.1.22/dist/zstd-codec.min.js'
+        // jsDelivr package page: https://www.jsdelivr.com/package/npm/zstd-codec
+        // The index.js in the package is only a CommonJS entry; the browser build is under /dist.
+        'https://cdn.jsdelivr.net/npm/zstd-codec@0.1.5/dist/zstd-codec.min.js',
+        'https://unpkg.com/zstd-codec@0.1.5/dist/zstd-codec.min.js'
     ];
 
     let loadPromise = null;

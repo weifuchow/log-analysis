@@ -323,7 +323,13 @@ export async function decompressZstdFile(buffer, fileName = '') {
 
         const simple = new zstd.Simple();
         const input = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-        return simple.decompress(input);
+        const result = simple.decompress(input);
+
+        if (result instanceof Promise) {
+            return await result;
+        }
+
+        return result;
     } catch (error) {
         console.error('Zstd 解压失败:', error);
         throw new Error(`无法解压 ${fileName}: ${error.message}`);
